@@ -1,0 +1,8 @@
+<resources>
+    <color name="background">#141C20</color>
+    <color name="surface">#243139</color>
+    <color name="text_primary">#F0F4EE</color>
+    <color name="text_secondary">#B5C3C8</color>
+    <color name="accent">#B8E3C4</color>
+    <color name="pending">#E8CE95</color>
+</resources>

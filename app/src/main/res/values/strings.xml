@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">FireMirror</string>
+    <string name="brand">FIREMIRROR</string>
+    <string name="ready">Ready to Mirror</string>
+    <string name="phase_notice">Phase 1 · Interface ready</string>
+    <string name="integration_pending">AirPlay integration is pending. This build will not appear in Screen Mirroring yet.</string>
+    <string name="mac_instructions">Once AirPlay is enabled, on your Mac:\nControl Center → Screen Mirroring → %1$s</string>
+    <string name="receiver">RECEIVER</string>
+    <string name="local_ip">LOCAL IP</string>
+    <string name="status">STATUS</string>
+    <string name="device">CONNECTED DEVICE</string>
+    <string name="resolution">RESOLUTION</string>
+    <string name="fps">FRAME RATE</string>
+    <string name="not_connected">Not connected</string>
+    <string name="no_stream">No stream</string>
+    <string name="network_unavailable">No WiFi or Ethernet</string>
+    <string name="receiver_unavailable">Receiver not installed</string>
+    <string name="settings">Settings</string>
+    <string name="diagnostics">Diagnostics</string>
+    <string name="remote_hint">Use your remote to select Settings or Diagnostics.</string>
+    <string name="settings_intro">Name and logging are available now. Playback settings arrive with the receiver.</string>
+    <string name="receiver_name">Receiver name</string>
+    <string name="diagnostic_logging">Diagnostic logging</string>
+    <string name="logging_detail">Logs lifecycle and network state locally. No screen content is recorded.</string>
+    <string name="save">Save settings</string>
+    <string name="cancel">Cancel</string>
+    <string name="name_error">Enter a name of at most 63 UTF8 bytes, without control characters.</string>
+    <string name="future_settings">Planned playback preferences: audio, preferred resolution, hardware decoding, automatic receiver start.</string>
+    <string name="diagnostics_intro">Device information for checking Fire OS compatibility. No data is uploaded.</string>
+    <string name="refresh">Refresh</string>
+    <string name="back">Back</string>
+    <string name="waiting">Waiting for connection</string>
+    <string name="connecting">Connecting</string>
+    <string name="connected">Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="error">Error</string>
+</resources>

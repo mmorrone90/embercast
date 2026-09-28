@@ -1,0 +1,12 @@
+<lint>
+    <!-- Intentionally pin the compatible, verified build toolchain. -->
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+    <!-- TV sideload target; API 35 is intentional, no Play Store release. -->
+    <issue id="OldTargetApi" severity="ignore" />
+    <!-- TV activities must remain landscape. Keep other discouraged API checks. -->
+    <issue id="DiscouragedApi">
+        <ignore path="src/main/AndroidManifest.xml" />
+    </issue>
+    <!-- Launcher icon is a vector; TV banner is the required 320 by 180 xhdpi asset. -->
+    <issue id="IconMissingDensityFolder" severity="ignore" />
+</lint>

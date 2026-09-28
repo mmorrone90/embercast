@@ -1,0 +1,85 @@
+# Fire TV installation
+
+These steps apply to Android based Fire OS, not Vega OS. This APK requires Android API 24 or newer. [Amazon's ADB guide](https://developer.amazon.com/docs/fire-tv/connecting-adb-to-device.html) is the reference for device connection, and [Amazon's installation guide](https://developer.amazon.com/docs/fire-tv/installing-and-running-your-app.html) covers package management.
+
+## Prepare the Fire TV
+
+1. Put the Mac and Fire TV on the same LAN.
+2. Open Settings → My Fire TV (or Device & Software) → About.
+3. Record the model and software version. If Developer Options is hidden, select the device entry in About seven times with the remote's Select button. Return to My Fire TV.
+4. Open Developer Options and enable ADB Debugging. On versions with Apps from Unknown Sources, enable it. On versions with Install unknown apps, grant permission to your chosen sideload installer if using one. ADB uses the debugging connection.
+5. Find the IP under About → Network. Substitute that address for `FIRE_TV_IP` below.
+
+## Prepare this Mac
+
+Android Studio and SDK Platform Tools are already installed on the development Mac. For the current terminal session:
+
+```sh
+export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
+adb version
+```
+
+## Connect
+
+```sh
+adb connect FIRE_TV_IP:5555
+adb devices -l
+```
+
+Accept the debugging authorization prompt on the TV. `unauthorized` means authorization is still pending. `offline` is not a successful connection. If connection is refused, confirm the IP and ADB Debugging setting. Do not forward port 5555 through your router.
+
+## Check compatibility
+
+```sh
+adb -s FIRE_TV_IP:5555 shell getprop ro.product.model
+adb -s FIRE_TV_IP:5555 shell getprop ro.build.version.sdk
+adb -s FIRE_TV_IP:5555 shell getprop ro.build.display.id
+adb -s FIRE_TV_IP:5555 shell getprop ro.product.cpu.abilist
+```
+
+The API level must be 24 or higher. Phase 1 has no native library and is ABI independent. Later receiver builds must include both `armeabi-v7a` and `arm64-v8a`, because a 64 bit processor does not guarantee a 64 bit Fire OS userspace.
+
+## Install
+
+From the project directory:
+
+```sh
+adb -s FIRE_TV_IP:5555 install app/build/outputs/apk/debug/app-debug.apk
+adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/.MainActivity
+```
+
+The separately delivered `FireMirror-phase1-debug.apk` is the same build and can be installed using its path. FireMirror also appears in the TV app launcher. If it is absent from the recent apps row, use Your Apps & Channels or start through ADB.
+
+## Update while preserving settings
+
+```sh
+adb -s FIRE_TV_IP:5555 install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` usually indicates a signing key mismatch. Rebuild with the original key to retain settings. Uninstalling removes saved preferences.
+
+## Logs
+
+Enable Diagnostic logging in FireMirror Settings to see its lifecycle and network messages:
+
+```sh
+adb -s FIRE_TV_IP:5555 logcat -v time 'FireMirror:D' 'AndroidRuntime:E' '*:S'
+```
+
+For a broader device report:
+
+```sh
+adb -s FIRE_TV_IP:5555 shell dumpsys package dev.firemirror.tv
+adb -s FIRE_TV_IP:5555 shell dumpsys connectivity
+```
+
+Diagnostics inside the app show model, API level, build, ABI, LAN address, and available H.264/HEVC decoders. Decoder presence does not prove working playback.
+
+## Uninstall and disconnect
+
+```sh
+adb -s FIRE_TV_IP:5555 uninstall dev.firemirror.tv
+adb disconnect FIRE_TV_IP:5555
+```
+
+You can turn off ADB Debugging after testing. FireMirror itself does not need ADB to launch.
