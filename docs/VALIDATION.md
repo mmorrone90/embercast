@@ -61,3 +61,13 @@ During the baseline receiver test, the Fire TV displayed the Mac desktop, includ
 The FireMirror build script applied the checked in patch to use package `dev.firemirror.tv`, version `0.2.0`, receiver name FireMirror, port 7100, and no start at boot. The branded APK built successfully and its signature matched the earlier prototype's local debug signature. It updated the original package on the Fire TV, launched, started its server on port 7100, registered both discovery services, and displayed its waiting screen. macOS discovered the branded build's FireMirror service. A complete Mac to branded build playback test is still pending.
 
 The upstream receiver's `lintDebug` task did not pass: it reported 29 errors and 105 warnings, beginning with an inherited service `onStartCommand` super call warning. The receiver APK build and device smoke tests passed; lint cleanup remains separate work. The repository CI continues to lint the Phase 1 module and build the receiver APK.
+
+## FireMirror 0.3 feature build
+
+The updated receiver APK assembled successfully for `armeabi-v7a`, `arm64-v8a`, and `x86_64`. It was installed on the Fire TV Stick (3rd Gen), which reported package version `0.3.0` and Android API 28. The redesigned Overview and Captures screens were visually inspected at 1920 × 1080. The new mode controls were exercised through ADB input.
+
+With connection approval enabled, a TCP connection from the Mac's local address displayed the approval dialog on the TV, including that address and Allow and Deny actions. The dialog was dismissed with Deny and the receiver stayed running. The prompt is an address gate, not authenticated identification of a Mac. It allows an approved address for the remainder of the current server run. Full AirPlay pairing through that gate is pending a sender test.
+
+Audio only mode restarted the receiver and registered `_raop._tcp` without registering `_airplay._tcp`. Switching back to Mirror screen registered both services again. An actual audio stream was not played during this test.
+
+The Captures screen displayed an injected test PNG, its file size, and Share and Delete actions. The delete confirmation removed that file and the view returned to its empty state. A real mirrored screenshot, MP4 recording, playback of a saved recording, and sharing through an installed target app have not yet been tested. The Mac was locked during this verification, so live mirroring, picture fit, and capture controls could not be exercised end to end. iPhone and iPad traffic were not tested. Google Cast is not implemented, and Miracast is a separate Fire TV system feature.

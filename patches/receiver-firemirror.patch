@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 2604452..45045fc 100644
+index 2604452..9bb0fbb 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -31,11 +31,11 @@ android {
@@ -12,13 +12,227 @@ index 2604452..45045fc 100644
          targetSdk = 36
 -        versionCode = 31
 -        versionName = "0.0.31"
-+        versionCode = 2
-+        versionName = "0.2.0"
++        versionCode = 3
++        versionName = "0.3.0"
  
          externalNativeBuild {
              cmake {
+diff --git a/app/src/main/cpp/android_raop_callbacks.c b/app/src/main/cpp/android_raop_callbacks.c
+index 3b3b618..314ec1a 100644
+--- a/app/src/main/cpp/android_raop_callbacks.c
++++ b/app/src/main/cpp/android_raop_callbacks.c
+@@ -56,6 +56,7 @@ void android_callbacks_init(android_callback_ctx_t *ctx, JNIEnv *env, jobject ca
+     ctx->on_client_volume = (*env)->GetMethodID(env, cls, "onClientVolume", "()F");
+     ctx->on_audio_teardown = (*env)->GetMethodID(env, cls, "onAudioTeardown", "()V");
+     ctx->on_conn_init = (*env)->GetMethodID(env, cls, "onConnectionInit", "()V");
++    ctx->on_conn_authorize = (*env)->GetMethodID(env, cls, "onConnectionRequest", "(Ljava/lang/String;)Z");
+     ctx->on_conn_destroy = (*env)->GetMethodID(env, cls, "onConnectionDestroy", "()V");
+     ctx->on_conn_reset = (*env)->GetMethodID(env, cls, "onConnectionReset", "(I)V");
+     ctx->on_display_pin = (*env)->GetMethodID(env, cls, "onDisplayPin", "(Ljava/lang/String;)V");
+@@ -142,6 +143,22 @@ static void _conn_init(void *cls) {
+     (*env)->CallVoidMethod(env, ctx->callback_obj, ctx->on_conn_init);
+ }
+ 
++static int _conn_authorize(void *cls, const char *remote_address) {
++    android_callback_ctx_t *ctx = (android_callback_ctx_t *)cls;
++    JNIEnv *env = _get_env(ctx);
++    if (!env) return 0;
++    jstring address = (*env)->NewStringUTF(env, remote_address);
++    jboolean allowed = (*env)->CallBooleanMethod(env, ctx->callback_obj,
++                                                 ctx->on_conn_authorize, address);
++    (*env)->DeleteLocalRef(env, address);
++    if ((*env)->ExceptionCheck(env)) {
++        (*env)->ExceptionDescribe(env);
++        (*env)->ExceptionClear(env);
++        return 0;
++    }
++    return allowed ? 1 : 0;
++}
++
+ static void _conn_destroy(void *cls) {
+     android_callback_ctx_t *ctx = (android_callback_ctx_t *)cls;
+     JNIEnv *env = _get_env(ctx);
+@@ -395,6 +412,7 @@ void android_callbacks_fill(raop_callbacks_t *cbs, android_callback_ctx_t *ctx)
+     cbs->conn_reset = _conn_reset;
+     cbs->video_reset = _video_reset;
+     cbs->conn_init = _conn_init;
++    cbs->conn_authorize = _conn_authorize;
+     cbs->conn_destroy = _conn_destroy;
+     cbs->audio_flush = _audio_flush;
+     cbs->video_flush = _video_flush;
+diff --git a/app/src/main/cpp/android_raop_callbacks.h b/app/src/main/cpp/android_raop_callbacks.h
+index 43e9908..a014101 100644
+--- a/app/src/main/cpp/android_raop_callbacks.h
++++ b/app/src/main/cpp/android_raop_callbacks.h
+@@ -21,6 +21,7 @@ typedef struct {
+     jmethodID on_client_volume;
+     jmethodID on_audio_teardown;
+     jmethodID on_conn_init;
++    jmethodID on_conn_authorize;
+     jmethodID on_conn_destroy;
+     jmethodID on_conn_reset;
+     jmethodID on_display_pin;
+diff --git a/app/src/main/cpp/patches/UxPlay/0007-require-connection-approval.patch b/app/src/main/cpp/patches/UxPlay/0007-require-connection-approval.patch
+new file mode 100644
+index 0000000..f496418
+--- /dev/null
++++ b/app/src/main/cpp/patches/UxPlay/0007-require-connection-approval.patch
+@@ -0,0 +1,28 @@
++diff --git a/lib/raop.h b/lib/raop.h
++--- a/lib/raop.h
+++++ b/lib/raop.h
++@@ -83,6 +83,7 @@
++   
++     /* Optional but recommended callback functions (probably not optional, check this)*/
++     void  (*conn_init)(void *cls);
+++    int   (*conn_authorize)(void *cls, const char *remote_address);
++     void  (*conn_destroy)(void *cls);
++   //void  (*conn_teardown)(void *cls, bool *teardown_96, bool *teardown_110 ); /*not used */
++     void  (*audio_flush)(void *cls);
++diff --git a/lib/raop.c b/lib/raop.c
++--- a/lib/raop.c
+++++ b/lib/raop.c
++@@ -134,6 +134,13 @@
++     raop_conn_t *conn = NULL;
++     char ip_address[40] = { '\0' };
++     assert(raop);
+++
+++    utils_ipaddress_to_string(remotelen, remote, zone_id, ip_address, (int) sizeof(ip_address));
+++    if (raop->callbacks.conn_authorize &&
+++        !raop->callbacks.conn_authorize(raop->callbacks.cls, ip_address)) {
+++        logger_log(raop->logger, LOGGER_INFO, "Connection denied from %s", ip_address);
+++        return NULL;
+++    }
++ 
++     conn = calloc(1, sizeof(raop_conn_t));
++     if (!conn) {
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt b/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt
+index d72b937..e964620 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt
+@@ -2,6 +2,7 @@ package io.github.jqssun.airplay
+ 
+ import android.Manifest
+ import android.app.PictureInPictureParams
++import android.app.Activity
+ import android.content.ComponentName
+ import android.content.Intent
+ import android.content.ServiceConnection
+@@ -12,6 +13,8 @@ import android.os.Bundle
+ import android.os.IBinder
+ import android.util.Rational
+ import android.view.WindowManager
++import android.view.Surface
++import android.widget.Toast
+ import androidx.activity.ComponentActivity
+ import androidx.activity.compose.setContent
+ import androidx.activity.enableEdgeToEdge
+@@ -23,6 +26,7 @@ import androidx.lifecycle.Lifecycle
+ import androidx.lifecycle.lifecycleScope
+ import androidx.lifecycle.repeatOnLifecycle
+ import io.github.jqssun.airplay.service.AirPlayService
++import io.github.jqssun.airplay.capture.MirrorCapture
+ import io.github.jqssun.airplay.ui.MainScreen
+ import io.github.jqssun.airplay.ui.theme.AirPlayTheme
+ import io.github.jqssun.airplay.viewmodel.MainViewModel
+@@ -36,6 +40,9 @@ class MainActivity : ComponentActivity() {
+ 
+     private val viewModel: MainViewModel by viewModels()
+     private var service: AirPlayService? = null
++    private lateinit var capture: MirrorCapture
++    private var mirrorSurface: Surface? = null
++    private val recording = mutableStateOf(false)
+     val isInPip = mutableStateOf(false)
+     private val logCallback: (String) -> Unit = { viewModel.addLog(it) }
+     private val pinCallback: (String?) -> Unit = { viewModel.showPin(it) }
+@@ -61,9 +68,23 @@ class MainActivity : ComponentActivity() {
+         ActivityResultContracts.RequestPermission()
+     ) { /* granted or not, service works either way */ }
+ 
++    private val capturePermission = registerForActivityResult(
++        ActivityResultContracts.StartActivityForResult()
++    ) { result ->
++        if (result.resultCode != Activity.RESULT_OK || result.data == null) return@registerForActivityResult
++        capture.startRecording(result.resultCode, result.data!!).fold(
++            onSuccess = {
++                recording.value = true
++                toast(getString(R.string.recording_started))
++            },
++            onFailure = { toast(it.message ?: getString(R.string.capture_failed)) }
++        )
++    }
++
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         enableEdgeToEdge()
++        capture = MirrorCapture(this)
+ 
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+@@ -110,9 +131,18 @@ class MainActivity : ComponentActivity() {
+                 MainScreen(
+                     viewModel = viewModel,
+                     isInPip = isInPip.value,
+-                    onSurfaceAvailable = { viewModel.onSurfaceAvailable(it) },
+-                    onSurfaceDestroyed = { viewModel.onSurfaceDestroyed(it) },
+-                    onPip = { enterPip() }
++                    onSurfaceAvailable = {
++                        mirrorSurface = it
++                        viewModel.onSurfaceAvailable(it)
++                    },
++                    onSurfaceDestroyed = {
++                        if (mirrorSurface === it) mirrorSurface = null
++                        viewModel.onSurfaceDestroyed(it)
++                    },
++                    onPip = { enterPip() },
++                    onCapture = { saveScreenshot() },
++                    onRecord = { toggleRecording() },
++                    recording = recording.value
+                 )
+             }
+         }
+@@ -123,6 +153,31 @@ class MainActivity : ComponentActivity() {
+         enterPictureInPictureMode(_pipParams())
+     }
+ 
++    private fun saveScreenshot() {
++        capture.screenshot(mirrorSurface, viewModel.videoAspect.value) { result ->
++            result.fold(
++                onSuccess = { toast(getString(R.string.capture_saved, it.absolutePath)) },
++                onFailure = { toast(it.message ?: getString(R.string.capture_failed)) }
++            )
++        }
++    }
++
++    private fun toggleRecording() {
++        if (capture.isRecording) {
++            recording.value = false
++            capture.stopRecording().fold(
++                onSuccess = { toast(getString(R.string.capture_saved, it.absolutePath)) },
++                onFailure = { toast(it.message ?: getString(R.string.capture_failed)) }
++            )
++        } else {
++            capturePermission.launch(capture.requestIntent())
++        }
++    }
++
++    private fun toast(message: String) {
++        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
++    }
++
+     private fun _pipParams(): PictureInPictureParams {
+         val aspect = if (viewModel.videoPlaybackActive.value) viewModel.videoPlaybackAspect.value
+             else viewModel.videoAspect.value
+@@ -159,6 +214,7 @@ class MainActivity : ComponentActivity() {
+     }
+ 
+     override fun onDestroy() {
++        if (capture.isRecording) capture.stopRecording()
+         service?.let {
+             if (it.logCallback === logCallback) it.logCallback = null
+             if (it.pinCallback === pinCallback) it.pinCallback = null
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt b/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
-index f4a643e..1ea0876 100644
+index f4a643e..dcabfbc 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
 @@ -7,11 +7,11 @@ object Prefs {
@@ -36,11 +250,874 @@ index f4a643e..1ea0876 100644
      const val RUN_IN_BACKGROUND = "run_in_background"; const val DEF_RUN_IN_BACKGROUND = true
      const val H265_ENABLED = "h265_enabled"; const val DEF_H265_ENABLED = true
      const val ENFORCE_SDR = "enforce_sdr"; const val DEF_ENFORCE_SDR = true
+@@ -35,6 +35,7 @@ object Prefs {
+     const val MAX_FPS = "max_fps"; const val DEF_MAX_FPS = 60
+     const val OVERSCANNED = "overscanned"; const val DEF_OVERSCANNED = false
+     const val REQUIRE_PIN = "require_pin"; const val DEF_REQUIRE_PIN = false
++    const val APPROVAL_REQUIRED = "approval_required"; const val DEF_APPROVAL_REQUIRED = false
+     const val ALLOW_NEW_CONN = "allow_new_conn"; const val DEF_ALLOW_NEW_CONN = true
+     const val AUDIO_LATENCY_MS = "audio_latency_ms"; const val DEF_AUDIO_LATENCY_MS = -1
+     const val DEBUG_ENABLED = "debug_enabled"; const val DEF_DEBUG_ENABLED = false
+@@ -45,5 +46,6 @@ object Prefs {
+     const val KEEP_SCREEN_ON = "keep_screen_on"; const val DEF_KEEP_SCREEN_ON = true
+     const val ADVERTISE_VIDEO = "advertise_video"; const val DEF_ADVERTISE_VIDEO = true
+     const val ADVERTISE_AUDIO = "advertise_audio"; const val DEF_ADVERTISE_AUDIO = true
++    const val AUDIO_ONLY_MODE = "audio_only_mode"; const val DEF_AUDIO_ONLY_MODE = false
+     const val LAUNCH_ON_CONNECT = "launch_on_connect"; const val DEF_LAUNCH_ON_CONNECT = true
+ }
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt b/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt
+index 8732267..dce4d81 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt
+@@ -8,6 +8,7 @@ interface RaopCallbackHandler {
+     fun onClientVolume(): Float
+     fun onAudioTeardown()
+     fun onConnectionInit()
++    fun onConnectionRequest(remoteAddress: String): Boolean
+     fun onConnectionDestroy()
+     fun onConnectionReset(reason: Int)
+     fun onDisplayPin(pin: String)
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/capture/MirrorCapture.kt b/app/src/main/kotlin/io/github/jqssun/airplay/capture/MirrorCapture.kt
+new file mode 100644
+index 0000000..7bcc06c
+--- /dev/null
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/capture/MirrorCapture.kt
+@@ -0,0 +1,129 @@
++package io.github.jqssun.airplay.capture
++
++import android.app.Activity
++import android.content.Context
++import android.content.Intent
++import android.graphics.Bitmap
++import android.hardware.display.DisplayManager
++import android.hardware.display.VirtualDisplay
++import android.media.MediaRecorder
++import android.media.projection.MediaProjection
++import android.media.projection.MediaProjectionManager
++import android.os.Build
++import android.os.Environment
++import android.os.Handler
++import android.os.Looper
++import android.view.PixelCopy
++import android.view.Surface
++import java.io.File
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++import kotlin.concurrent.thread
++import kotlin.math.roundToInt
++
++/** Captures the app's current display. Files stay in FireMirror's external app folder. */
++class MirrorCapture(private val activity: Activity) {
++    private var projection: MediaProjection? = null
++    private var virtualDisplay: VirtualDisplay? = null
++    private var recorder: MediaRecorder? = null
++    private var recordingFile: File? = null
++
++    val isRecording: Boolean get() = recorder != null
++
++    fun requestIntent(): Intent =
++        (activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager)
++            .createScreenCaptureIntent()
++
++    fun screenshot(surface: Surface?, aspect: Float, onResult: (Result<File>) -> Unit) {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || surface?.isValid != true) {
++            onResult(Result.failure(IllegalStateException("A mirrored picture is not available")))
++            return
++        }
++        val width = (720 * aspect).roundToInt().coerceIn(480, 1920)
++        val bitmap = Bitmap.createBitmap(width, 720, Bitmap.Config.ARGB_8888)
++        runCatching { PixelCopy.request(surface, bitmap, { result ->
++            if (result != PixelCopy.SUCCESS) {
++                bitmap.recycle()
++                onResult(Result.failure(IllegalStateException("Could not capture the picture ($result)")))
++                return@request
++            }
++            thread(name = "FireMirrorScreenshot") {
++                val saved = runCatching {
++                    val file = outputFile(Environment.DIRECTORY_PICTURES, "png")
++                    file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
++                    file
++                }
++                bitmap.recycle()
++                Handler(Looper.getMainLooper()).post { onResult(saved) }
++            }
++        }, Handler(Looper.getMainLooper())) }.onFailure {
++            bitmap.recycle()
++            onResult(Result.failure(it))
++        }
++    }
++
++    fun startRecording(resultCode: Int, data: Intent): Result<File> = runCatching {
++        check(!isRecording) { "Recording is already active" }
++        val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
++        val mediaProjection = manager.getMediaProjection(resultCode, data)
++            ?: error("Screen capture permission was not granted")
++        projection = mediaProjection
++        mediaProjection.registerCallback(object : MediaProjection.Callback() {}, Handler(Looper.getMainLooper()))
++        val file = outputFile(Environment.DIRECTORY_MOVIES, "mp4")
++        recordingFile = file
++        @Suppress("DEPRECATION")
++        val mediaRecorder = MediaRecorder()
++        recorder = mediaRecorder
++        mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)
++        mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
++        mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
++        mediaRecorder.setVideoSize(1280, 720)
++        mediaRecorder.setVideoFrameRate(30)
++        mediaRecorder.setVideoEncodingBitRate(3_000_000)
++        mediaRecorder.setOutputFile(file.absolutePath)
++        mediaRecorder.prepare()
++        val density = activity.resources.displayMetrics.densityDpi
++        virtualDisplay = mediaProjection.createVirtualDisplay(
++            "FireMirror recording", 1280, 720, density,
++            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
++            mediaRecorder.surface, null, Handler(Looper.getMainLooper())
++        ) ?: error("The TV could not create a recording display")
++        mediaRecorder.start()
++        file
++    }.onFailure {
++        recordingFile?.delete()
++        releaseRecording()
++    }
++
++    fun stopRecording(): Result<File> {
++        val file = recordingFile ?: return Result.failure(IllegalStateException("No recording is active"))
++        var stopError: Throwable? = null
++        try {
++            recorder?.stop()
++        } catch (error: Throwable) {
++            stopError = error
++            file.delete()
++        } finally { releaseRecording() }
++        return if (stopError == null && file.exists() && file.length() > 0) Result.success(file)
++        else Result.failure(stopError ?: IllegalStateException("Recording was empty"))
++    }
++
++    private fun releaseRecording() {
++        runCatching { recorder?.reset() }
++        runCatching { recorder?.release() }
++        recorder = null
++        runCatching { virtualDisplay?.release() }
++        virtualDisplay = null
++        runCatching { projection?.stop() }
++        projection = null
++        recordingFile = null
++    }
++
++    private fun outputFile(folder: String, extension: String): File {
++        val root = activity.getExternalFilesDir(folder) ?: activity.filesDir
++        check(root.exists() || root.mkdirs()) { "Could not create storage folder" }
++        val time = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
++        return File(root, "FireMirror_$time.$extension")
++    }
++}
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
+index 9390300..5ceda9d 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
+@@ -51,6 +51,8 @@ import io.github.jqssun.airplay.renderer.VideoRenderer
+ import io.github.jqssun.airplay.viewmodel.DebugInfo
+ import java.net.NetworkInterface
+ import java.security.SecureRandom
++import java.util.concurrent.CountDownLatch
++import java.util.concurrent.TimeUnit
+ import kotlin.math.abs
+ import kotlin.math.roundToInt
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -94,6 +96,16 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     private val _connectionCount = MutableStateFlow(0)
+     val connectionCount = _connectionCount.asStateFlow()
+ 
++    private class ApprovalRequest(val address: String) {
++        val decision = CountDownLatch(1)
++        @Volatile var allowed = false
++    }
++    private val approvalLock = Any()
++    private var approvalRequest: ApprovalRequest? = null
++    private val approvedAddresses = mutableSetOf<String>()
++    private val _pendingApproval = MutableStateFlow<String?>(null)
++    val pendingApproval = _pendingApproval.asStateFlow()
++
+     private val _videoAspect = MutableStateFlow(16f / 9f)
+     val videoAspect = _videoAspect.asStateFlow()
+ 
+@@ -428,7 +440,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         if (prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO)) {
+             nsdManager?.registerRaop(raopName, port, raopTxt)
+         }
+-        nsdManager?.registerAirplay(resolvedName, port, airplayTxt)
++        if (!prefs.getBoolean(Prefs.AUDIO_ONLY_MODE, Prefs.DEF_AUDIO_ONLY_MODE)) {
++            nsdManager?.registerAirplay(resolvedName, port, airplayTxt)
++        }
+ 
+         _serverState.value = ServerState.RUNNING
+         if (ensureServiceStarted) {
+@@ -489,6 +503,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     }
+ 
+     fun stopServer() {
++        denyPendingApproval()
++        synchronized(approvalLock) { approvedAddresses.clear() }
+         audioRenderer.detachEngine()
+         if (nativeHandle != 0L) {
+             NativeBridge.nativeStop(nativeHandle)
+@@ -722,6 +738,59 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         launchMainActivity()
+     }
+ 
++    override fun onConnectionRequest(remoteAddress: String): Boolean {
++        if (isOwnAddress(remoteAddress)) return true
++        if (!prefs.getBoolean(Prefs.APPROVAL_REQUIRED, Prefs.DEF_APPROVAL_REQUIRED)) return true
++        val request = synchronized(approvalLock) {
++            if (remoteAddress in approvedAddresses) return true
++            val existing = approvalRequest
++            if (existing != null && existing.address != remoteAddress) return false
++            existing ?: ApprovalRequest(remoteAddress).also {
++                approvalRequest = it
++                _pendingApproval.value = remoteAddress
++                launchMainActivity()
++            }
++        }
++        val decided = try { request.decision.await(30, TimeUnit.SECONDS) }
++        catch (_: InterruptedException) { false }
++        synchronized(approvalLock) {
++            if (approvalRequest === request) {
++                approvalRequest = null
++                _pendingApproval.value = null
++            }
++        }
++        return decided && request.allowed
++    }
++
++    fun answerConnectionRequest(allow: Boolean) {
++        synchronized(approvalLock) {
++            val request = approvalRequest ?: return
++            request.allowed = allow
++            if (allow) approvedAddresses.add(request.address)
++            approvalRequest = null
++            _pendingApproval.value = null
++            request.decision.countDown()
++        }
++    }
++
++    private fun denyPendingApproval() = answerConnectionRequest(false)
++
++    private fun isOwnAddress(address: String): Boolean {
++        if (address == "127.0.0.1" || address == "::1") return true
++        return runCatching {
++            val interfaces = NetworkInterface.getNetworkInterfaces()
++            while (interfaces.hasMoreElements()) {
++                val addresses = interfaces.nextElement().inetAddresses
++                while (addresses.hasMoreElements()) {
++                    if (addresses.nextElement().hostAddress?.substringBefore('%') == address.substringBefore('%')) {
++                        return true
++                    }
++                }
++            }
++            false
++        }.getOrDefault(false)
++    }
++
+     override fun onConnectionDestroy() {
+         _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
+         if (_connectionCount.value == 0) {
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt
+new file mode 100644
+index 0000000..c7e449d
+--- /dev/null
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt
+@@ -0,0 +1,124 @@
++package io.github.jqssun.airplay.ui
++
++import android.content.Intent
++import android.os.Environment
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Delete
++import androidx.compose.material.icons.filled.Movie
++import androidx.compose.material.icons.filled.Photo
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.FilledTonalButton
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.Icon
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.unit.dp
++import androidx.core.content.FileProvider
++import io.github.jqssun.airplay.R
++import java.io.File
++
++@Composable
++fun CapturesScreen() {
++    val context = LocalContext.current
++    fun files(): List<File> = listOf(Environment.DIRECTORY_PICTURES, Environment.DIRECTORY_MOVIES)
++        .flatMap { folder -> context.getExternalFilesDir(folder)?.listFiles()?.toList().orEmpty() }
++        .filter { it.isFile && it.name.startsWith("FireMirror_") && it.extension in setOf("png", "mp4") }
++        .sortedByDescending { it.lastModified() }
++
++    var captures by remember { mutableStateOf(files()) }
++    var toDelete by remember { mutableStateOf<File?>(null) }
++
++    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 24.dp)) {
++        Row(
++            modifier = Modifier.fillMaxWidth(),
++            horizontalArrangement = Arrangement.SpaceBetween,
++            verticalAlignment = Alignment.CenterVertically
++        ) {
++            Text(stringResource(R.string.captures_title), style = MaterialTheme.typography.headlineMedium)
++            FilledTonalButton(onClick = { captures = files() }, modifier = Modifier.dpadFocus()) {
++                Text(stringResource(R.string.captures_refresh))
++            }
++        }
++        Spacer(Modifier.height(20.dp))
++        if (captures.isEmpty()) {
++            Text(
++                stringResource(R.string.captures_empty),
++                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                style = MaterialTheme.typography.bodyLarge
++            )
++        } else {
++            LazyColumn {
++                items(captures, key = { it.absolutePath }) { file ->
++                    Row(
++                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
++                        horizontalArrangement = Arrangement.spacedBy(16.dp),
++                        verticalAlignment = Alignment.CenterVertically
++                    ) {
++                        Icon(if (file.extension == "mp4") Icons.Default.Movie else Icons.Default.Photo, null)
++                        Column(modifier = Modifier.weight(1f)) {
++                            Text(file.name, style = MaterialTheme.typography.titleMedium)
++                            Text("${file.length() / 1024} KB", color = MaterialTheme.colorScheme.onSurfaceVariant)
++                        }
++                        TextButton(onClick = {
++                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
++                            val mime = if (file.extension == "mp4") "video/mp4" else "image/png"
++                            val intent = Intent(Intent.ACTION_SEND).apply {
++                                type = mime
++                                putExtra(Intent.EXTRA_STREAM, uri)
++                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
++                            }
++                            context.startActivity(Intent.createChooser(intent, context.getString(R.string.captures_share)))
++                        }, modifier = Modifier.dpadFocus()) {
++                            Text(stringResource(R.string.captures_share))
++                        }
++                        TextButton(onClick = { toDelete = file }, modifier = Modifier.dpadFocus()) {
++                            Icon(Icons.Default.Delete, null)
++                            Text(stringResource(R.string.captures_delete))
++                        }
++                    }
++                    HorizontalDivider()
++                }
++            }
++        }
++    }
++
++    toDelete?.let { file ->
++        AlertDialog(
++            onDismissRequest = { toDelete = null },
++            title = { Text(stringResource(R.string.captures_delete_title)) },
++            text = { Text(stringResource(R.string.captures_delete_message, file.name)) },
++            confirmButton = {
++                TextButton(onClick = {
++                    file.delete()
++                    captures = files()
++                    toDelete = null
++                }, modifier = Modifier.dpadFocus()) { Text(stringResource(R.string.captures_delete)) }
++            },
++            dismissButton = {
++                TextButton(onClick = { toDelete = null }, modifier = Modifier.dpadFocus()) {
++                    Text(stringResource(R.string.captures_cancel))
++                }
++            }
++        )
++    }
++}
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
+index 81e662d..3eeeefe 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
+@@ -78,6 +78,7 @@ import kotlinx.coroutines.delay
+ 
+ private enum class Tab(val labelRes: Int, val icon: ImageVector) {
+     OVERVIEW(R.string.tab_overview, Icons.Default.Cast),
++    CAPTURES(R.string.tab_captures, Icons.Default.Collections),
+     LOGS(R.string.tab_logs, Icons.AutoMirrored.Filled.Article),
+     SETTINGS(R.string.tab_settings, Icons.Default.Settings)
+ }
+@@ -88,26 +89,48 @@ fun MainScreen(
+     isInPip: Boolean = false,
+     onSurfaceAvailable: (android.view.Surface) -> Unit,
+     onSurfaceDestroyed: (android.view.Surface) -> Unit,
+-    onPip: () -> Unit = {}
++    onPip: () -> Unit = {},
++    onCapture: () -> Unit = {},
++    onRecord: () -> Unit = {},
++    recording: Boolean = false
+ ) {
+     var tab by remember { mutableStateOf(Tab.OVERVIEW) }
+     var fullscreen by remember { mutableStateOf(false) }
+     val pin by viewModel.pinCode.collectAsState()
++    val pendingApproval by viewModel.pendingApproval.collectAsState()
+     val connections by viewModel.connectionCount.collectAsState()
+     val audioOnly by viewModel.audioOnly.collectAsState()
+     val videoPlaybackActive by viewModel.videoPlaybackActive.collectAsState()
+     val videoSessionPending by viewModel.videoSessionPending.collectAsState()
+     val mirroringActive by viewModel.mirroringActive.collectAsState()
+     val autoFullscreen by viewModel.autoFullscreen.collectAsState()
++    var mirrorScale by remember { mutableStateOf(VideoContentScale.BEST_FIT) }
++    var mirrorZoom by remember { mutableFloatStateOf(1f) }
++    val nextMirrorScale = {
++        mirrorScale = when (mirrorScale) {
++            VideoContentScale.BEST_FIT -> VideoContentScale.CROP
++            VideoContentScale.CROP -> VideoContentScale.STRETCH
++            else -> VideoContentScale.BEST_FIT
++        }
++        mirrorZoom = 1f
++    }
+ 
+     // don't use movableContentOf: moving AndroidView across subcomposition boundaries makes it crash on reparent
+     val video: @Composable () -> Unit = {
+         val aspect by viewModel.videoAspect.collectAsState()
+-        VideoSurfaceView(
+-            onSurfaceAvailable = onSurfaceAvailable,
+-            onSurfaceDestroyed = onSurfaceDestroyed,
+-            aspectRatio = aspect
+-        )
++        VideoContentFrame(
++            aspect = aspect,
++            videoSizePx = null,
++            contentScale = mirrorScale,
++            zoom = mirrorZoom
++        ) { sizeModifier ->
++            VideoSurfaceView(
++                onSurfaceAvailable = onSurfaceAvailable,
++                onSurfaceDestroyed = onSurfaceDestroyed,
++                applyAspectRatio = false,
++                modifier = sizeModifier
++            )
++        }
+     }
+ 
+     // fullscreen only once mirroring reports a size: connections rise before the kind is known
+@@ -507,7 +530,14 @@ fun MainScreen(
+             viewModel = viewModel,
+             video = video,
+             onExitFullscreen = { fullscreen = false },
+-            onPip = onPip
++            onPip = onPip,
++            scale = mirrorScale,
++            onScaleChange = nextMirrorScale,
++            onZoomIn = { mirrorZoom = (mirrorZoom + 0.1f).coerceAtMost(2f) },
++            onZoomOut = { mirrorZoom = (mirrorZoom - 0.1f).coerceAtLeast(1f) },
++            onCapture = onCapture,
++            onRecord = onRecord,
++            recording = recording
+         )
+     } else {
+         Scaffold(
+@@ -535,7 +565,14 @@ fun MainScreen(
+             Box(modifier = Modifier.padding(padding)) {
+                 TabContent(
+                     tab, viewModel, video,
+-                    onFullscreen = { fullscreen = true }, onPip = onPip, showAudioMode = audioOnly
++                    onFullscreen = { fullscreen = true }, onPip = onPip, showAudioMode = audioOnly,
++                    scale = mirrorScale,
++                    onScaleChange = nextMirrorScale,
++                    onZoomIn = { mirrorZoom = (mirrorZoom + 0.1f).coerceAtMost(2f) },
++                    onZoomOut = { mirrorZoom = (mirrorZoom - 0.1f).coerceAtLeast(1f) },
++                    onCapture = onCapture,
++                    onRecord = onRecord,
++                    recording = recording
+                 )
+             }
+         }
+@@ -560,6 +597,25 @@ fun MainScreen(
+         )
+     }
+ 
++    if (pendingApproval != null) {
++        AlertDialog(
++            onDismissRequest = { viewModel.answerConnectionRequest(false) },
++            icon = { Icon(Icons.Default.Devices, null) },
++            title = { Text(stringResource(R.string.approval_title)) },
++            text = { Text(stringResource(R.string.approval_message, pendingApproval!!)) },
++            confirmButton = {
++                Button(onClick = { viewModel.answerConnectionRequest(true) }, modifier = Modifier.dpadFocus()) {
++                    Text(stringResource(R.string.approval_allow))
++                }
++            },
++            dismissButton = {
++                TextButton(onClick = { viewModel.answerConnectionRequest(false) }, modifier = Modifier.dpadFocus()) {
++                    Text(stringResource(R.string.approval_deny))
++                }
++            }
++        )
++    }
++
+ }
+ 
+ @Composable
+@@ -569,13 +625,28 @@ private fun TabContent(
+     video: @Composable () -> Unit,
+     onFullscreen: () -> Unit,
+     onPip: () -> Unit,
+-    showAudioMode: Boolean
++    showAudioMode: Boolean,
++    scale: VideoContentScale,
++    onScaleChange: () -> Unit,
++    onZoomIn: () -> Unit,
++    onZoomOut: () -> Unit,
++    onCapture: () -> Unit,
++    onRecord: () -> Unit,
++    recording: Boolean
+ ) {
+     when (tab) {
+         Tab.OVERVIEW -> OverviewContent(
+             viewModel, video,
+-            onFullscreen = onFullscreen, onPip = onPip, showAudioMode = showAudioMode
++            onFullscreen = onFullscreen, onPip = onPip, showAudioMode = showAudioMode,
++            scale = scale,
++            onScaleChange = onScaleChange,
++            onZoomIn = onZoomIn,
++            onZoomOut = onZoomOut,
++            onCapture = onCapture,
++            onRecord = onRecord,
++            recording = recording
+         )
++        Tab.CAPTURES -> CapturesScreen()
+         Tab.LOGS -> LogsScreen(viewModel)
+         Tab.SETTINGS -> SettingsScreen(viewModel)
+     }
+@@ -587,7 +658,14 @@ private fun OverviewContent(
+     video: @Composable () -> Unit,
+     onFullscreen: () -> Unit,
+     onPip: () -> Unit,
+-    showAudioMode: Boolean = false
++    showAudioMode: Boolean = false,
++    scale: VideoContentScale,
++    onScaleChange: () -> Unit,
++    onZoomIn: () -> Unit,
++    onZoomOut: () -> Unit,
++    onCapture: () -> Unit,
++    onRecord: () -> Unit,
++    recording: Boolean
+ ) {
+     val state by viewModel.serverState.collectAsState()
+     val connections by viewModel.connectionCount.collectAsState()
+@@ -598,6 +676,8 @@ private fun OverviewContent(
+     val videoPlaybackActive by viewModel.videoPlaybackActive.collectAsState()
+     val debugEnabled by viewModel.debugEnabled.collectAsState()
+     val debugInfo by viewModel.debugInfo.collectAsState()
++    val audioOnlyMode by viewModel.audioOnlyMode.collectAsState()
++    val approvalRequired by viewModel.approvalRequired.collectAsState()
+     val tv = isTv()
+     val startFocus = remember { FocusRequester() }
+     LaunchedEffect(Unit) {
+@@ -626,21 +706,48 @@ private fun OverviewContent(
+                 if (state != ServerState.RUNNING || connections == 0) {
+                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                         Icon(
+-                            imageVector = if (connections > 0) Icons.Default.CastConnected else Icons.Default.Cast,
++                            imageVector = if (audioOnlyMode) Icons.Default.MusicNote else Icons.Default.Cast,
+                             contentDescription = null,
+-                            modifier = Modifier.size(64.dp),
+-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
++                            modifier = Modifier.size(48.dp),
++                            tint = MaterialTheme.colorScheme.primary
++                        )
++                        Spacer(Modifier.height(18.dp))
++                        Text(
++                            text = when (state) {
++                                ServerState.STOPPED -> stringResource(R.string.home_stopped)
++                                ServerState.RUNNING -> stringResource(R.string.home_ready)
++                                ServerState.ERROR -> stringResource(R.string.home_error)
++                            },
++                            style = MaterialTheme.typography.headlineMedium,
++                            color = MaterialTheme.colorScheme.onSurface,
++                            fontWeight = FontWeight.SemiBold
+                         )
+-                        Spacer(Modifier.height(12.dp))
++                        Spacer(Modifier.height(8.dp))
+                         Text(
+                             text = when (state) {
+-                                ServerState.STOPPED -> stringResource(R.string.server_stopped)
+-                                ServerState.RUNNING -> stringResource(R.string.waiting_for_connection)
+-                                ServerState.ERROR -> stringResource(R.string.error_starting_server)
++                                ServerState.STOPPED -> stringResource(R.string.home_stopped_hint)
++                                ServerState.RUNNING -> if (audioOnlyMode) stringResource(R.string.home_audio_hint) else stringResource(R.string.home_mirror_hint)
++                                ServerState.ERROR -> stringResource(R.string.home_error_hint)
+                             },
+                             style = MaterialTheme.typography.bodyLarge,
+-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
++                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                         )
++                        if (state == ServerState.RUNNING && !audioOnlyMode) {
++                            Spacer(Modifier.height(6.dp))
++                            Text(
++                                text = stringResource(R.string.home_mobile_hint),
++                                style = MaterialTheme.typography.bodyMedium,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant
++                            )
++                        }
++                        if (state == ServerState.RUNNING) {
++                            Spacer(Modifier.height(20.dp))
++                            Text(
++                                text = serverName,
++                                style = MaterialTheme.typography.titleLarge,
++                                color = MaterialTheme.colorScheme.primary
++                            )
++                        }
+                     }
+                 } else if (connecting) {
+                     Text(
+@@ -691,7 +798,7 @@ private fun OverviewContent(
+             }
+         }
+ 
+-        // controls
++        // Common actions stay visible when the preview switches to a live session.
+         Card(
+             modifier = Modifier
+                 .fillMaxWidth()
+@@ -745,6 +852,53 @@ private fun OverviewContent(
+                         Text(if (state == ServerState.RUNNING) stringResource(R.string.btn_stop) else stringResource(R.string.btn_start))
+                     }
+                 }
++                Spacer(Modifier.height(16.dp))
++                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
++                    FilterChip(
++                        selected = !audioOnlyMode,
++                        onClick = { if (audioOnlyMode) viewModel.setAudioOnlyMode(false) },
++                        label = { Text(stringResource(R.string.mode_mirror)) },
++                        leadingIcon = { Icon(Icons.Default.Cast, null, modifier = Modifier.size(18.dp)) },
++                        modifier = Modifier.dpadFocus()
++                    )
++                    FilterChip(
++                        selected = audioOnlyMode,
++                        onClick = { if (!audioOnlyMode) viewModel.setAudioOnlyMode(true) },
++                        label = { Text(stringResource(R.string.mode_audio)) },
++                        leadingIcon = { Icon(Icons.Default.MusicNote, null, modifier = Modifier.size(18.dp)) },
++                        modifier = Modifier.dpadFocus()
++                    )
++                    Spacer(Modifier.width(12.dp))
++                    FilterChip(
++                        selected = approvalRequired,
++                        onClick = { viewModel.setApprovalRequired(!approvalRequired) },
++                        label = { Text(stringResource(R.string.mode_approval)) },
++                        leadingIcon = { Icon(Icons.Default.Lock, null, modifier = Modifier.size(18.dp)) },
++                        modifier = Modifier.dpadFocus()
++                    )
++                    if (mirroringActive) {
++                        Spacer(Modifier.width(12.dp))
++                        FilledTonalButton(onClick = onScaleChange, modifier = Modifier.dpadFocus()) {
++                            Icon(Icons.Default.AspectRatio, null, modifier = Modifier.size(18.dp))
++                            Spacer(Modifier.width(6.dp))
++                            Text(stringResource(scale.nameRes()))
++                        }
++                        IconButton(onClick = onZoomOut, modifier = Modifier.dpadFocus()) {
++                            Icon(Icons.Default.ZoomOut, stringResource(R.string.cd_zoom_out))
++                        }
++                        IconButton(onClick = onZoomIn, modifier = Modifier.dpadFocus()) {
++                            Icon(Icons.Default.ZoomIn, stringResource(R.string.cd_zoom_in))
++                        }
++                        IconButton(onClick = onCapture, modifier = Modifier.dpadFocus()) {
++                            Icon(Icons.Default.PhotoCamera, stringResource(R.string.cd_capture))
++                        }
++                        IconButton(onClick = onRecord, modifier = Modifier.dpadFocus()) {
++                            Icon(if (recording) Icons.Default.StopCircle else Icons.Default.FiberManualRecord,
++                                stringResource(if (recording) R.string.cd_stop_recording else R.string.cd_start_recording),
++                                tint = if (recording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
++                        }
++                    }
++                }
+             }
+         }
+     }
+@@ -755,7 +909,14 @@ private fun FullscreenVideo(
+     viewModel: MainViewModel,
+     video: @Composable () -> Unit,
+     onExitFullscreen: () -> Unit,
+-    onPip: () -> Unit
++    onPip: () -> Unit,
++    scale: VideoContentScale,
++    onScaleChange: () -> Unit,
++    onZoomIn: () -> Unit,
++    onZoomOut: () -> Unit,
++    onCapture: () -> Unit,
++    onRecord: () -> Unit,
++    recording: Boolean
+ ) {
+     val videoResolution by viewModel.videoResolution.collectAsState()
+     val debugEnabled by viewModel.debugEnabled.collectAsState()
+@@ -782,6 +943,23 @@ private fun FullscreenVideo(
+             modifier = Modifier.align(Alignment.TopEnd)
+         ) {
+             Row(modifier = Modifier.padding(8.dp)) {
++                IconButton(onClick = onScaleChange, modifier = Modifier.dpadFocus()) {
++                    Icon(Icons.Default.AspectRatio, stringResource(scale.nameRes()), tint = Color.White.copy(alpha = 0.8f))
++                }
++                IconButton(onClick = onZoomOut, modifier = Modifier.dpadFocus()) {
++                    Icon(Icons.Default.ZoomOut, stringResource(R.string.cd_zoom_out), tint = Color.White.copy(alpha = 0.8f))
++                }
++                IconButton(onClick = onZoomIn, modifier = Modifier.dpadFocus()) {
++                    Icon(Icons.Default.ZoomIn, stringResource(R.string.cd_zoom_in), tint = Color.White.copy(alpha = 0.8f))
++                }
++                IconButton(onClick = onCapture, modifier = Modifier.dpadFocus()) {
++                    Icon(Icons.Default.PhotoCamera, stringResource(R.string.cd_capture), tint = Color.White.copy(alpha = 0.8f))
++                }
++                IconButton(onClick = onRecord, modifier = Modifier.dpadFocus()) {
++                    Icon(if (recording) Icons.Default.StopCircle else Icons.Default.FiberManualRecord,
++                        stringResource(if (recording) R.string.cd_stop_recording else R.string.cd_start_recording),
++                        tint = if (recording) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.8f))
++                }
+                 IconButton(onClick = onPip, modifier = Modifier.dpadFocus()) {
+                     Icon(
+                         painterResource(R.drawable.ic_pip), contentDescription = stringResource(R.string.cd_pip),
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt
+index 4f5f226..9dfe777 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt
+@@ -1,28 +1,39 @@
+ package io.github.jqssun.airplay.ui.theme
+ 
+-import android.os.Build
+-import androidx.compose.foundation.isSystemInDarkTheme
+ import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Typography
+ import androidx.compose.material3.darkColorScheme
+-import androidx.compose.material3.dynamicDarkColorScheme
+-import androidx.compose.material3.dynamicLightColorScheme
+-import androidx.compose.material3.lightColorScheme
+ import androidx.compose.runtime.Composable
+-import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.graphics.Color
++
++private val FireMirrorColors = darkColorScheme(
++    primary = Color(0xFF76DFD1),
++    onPrimary = Color(0xFF082725),
++    primaryContainer = Color(0xFF17423F),
++    onPrimaryContainer = Color(0xFFD7F7F1),
++    secondary = Color(0xFFB4C9C6),
++    secondaryContainer = Color(0xFF314744),
++    onSecondaryContainer = Color(0xFFDCECE8),
++    background = Color(0xFF101817),
++    onBackground = Color(0xFFF0F6F3),
++    surface = Color(0xFF17211F),
++    onSurface = Color(0xFFF0F6F3),
++    surfaceDim = Color(0xFF101817),
++    surfaceBright = Color(0xFF35433F),
++    surfaceContainerLowest = Color(0xFF101817),
++    surfaceContainerLow = Color(0xFF192420),
++    surfaceContainer = Color(0xFF1E2A27),
++    surfaceContainerHigh = Color(0xFF263530),
++    surfaceContainerHighest = Color(0xFF30413B),
++    surfaceVariant = Color(0xFF24312E),
++    onSurfaceVariant = Color(0xFFC3D0CB),
++    outline = Color(0xFF647A73),
++    error = Color(0xFFFFB5AD)
++)
+ 
+ @Composable
+ fun AirPlayTheme(
+-    darkTheme: Boolean = isSystemInDarkTheme(),
+     content: @Composable () -> Unit
+ ) {
+-    val colorScheme = when {
+-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+-            val ctx = LocalContext.current
+-            if (darkTheme) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+-        }
+-        darkTheme -> darkColorScheme()
+-        else -> lightColorScheme()
+-    }
+-
+-    MaterialTheme(colorScheme = colorScheme, content = content)
++    MaterialTheme(colorScheme = FireMirrorColors, typography = Typography(), content = content)
+ }
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt b/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
+index 197800c..03db32f 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
+@@ -165,6 +165,12 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+     private val _requirePin = MutableStateFlow(prefs.getBoolean(Prefs.REQUIRE_PIN, Prefs.DEF_REQUIRE_PIN))
+     val requirePin: StateFlow<Boolean> = _requirePin.asStateFlow()
+ 
++    private val _approvalRequired = MutableStateFlow(prefs.getBoolean(Prefs.APPROVAL_REQUIRED, Prefs.DEF_APPROVAL_REQUIRED))
++    val approvalRequired: StateFlow<Boolean> = _approvalRequired.asStateFlow()
++
++    private val _pendingApproval = MutableStateFlow<String?>(null)
++    val pendingApproval: StateFlow<String?> = _pendingApproval.asStateFlow()
++
+     private val _allowNewConn = MutableStateFlow(prefs.getBoolean(Prefs.ALLOW_NEW_CONN, Prefs.DEF_ALLOW_NEW_CONN))
+     val allowNewConn: StateFlow<Boolean> = _allowNewConn.asStateFlow()
+ 
+@@ -186,6 +192,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+     private val _advertiseAudio = MutableStateFlow(prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO))
+     val advertiseAudio: StateFlow<Boolean> = _advertiseAudio.asStateFlow()
+ 
++    private val _audioOnlyMode = MutableStateFlow(prefs.getBoolean(Prefs.AUDIO_ONLY_MODE, Prefs.DEF_AUDIO_ONLY_MODE))
++    val audioOnlyMode: StateFlow<Boolean> = _audioOnlyMode.asStateFlow()
++
+     private val _launchOnConnect = MutableStateFlow(prefs.getBoolean(Prefs.LAUNCH_ON_CONNECT, Prefs.DEF_LAUNCH_ON_CONNECT))
+     val launchOnConnect: StateFlow<Boolean> = _launchOnConnect.asStateFlow()
+ 
+@@ -398,6 +407,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+     fun setMaxFps(v: Int) { _maxFps.value = v; prefs.edit().putInt(Prefs.MAX_FPS, v).apply(); _applyByServerRestart() }
+     fun setOverscanned(v: Boolean) { _overscanned.value = v; prefs.edit().putBoolean(Prefs.OVERSCANNED, v).apply(); _applyByServerRestart() }
+     fun setRequirePin(v: Boolean) { _requirePin.value = v; prefs.edit().putBoolean(Prefs.REQUIRE_PIN, v).apply(); _applyByServerRestart() }
++    fun setApprovalRequired(v: Boolean) {
++        _approvalRequired.value = v
++        prefs.edit().putBoolean(Prefs.APPROVAL_REQUIRED, v).apply()
++    }
++    fun answerConnectionRequest(allow: Boolean) { service?.answerConnectionRequest(allow) }
+     fun setAllowNewConn(v: Boolean) { _allowNewConn.value = v; prefs.edit().putBoolean(Prefs.ALLOW_NEW_CONN, v).apply(); _applyByServerRestart() }
+     fun setAudioLatencyMs(v: Int) { _audioLatencyMs.value = v; prefs.edit().putInt(Prefs.AUDIO_LATENCY_MS, v).apply(); _applyByServerRestart() }
+     fun setIdlePreview(v: Boolean) { _idlePreview.value = v; prefs.edit().putBoolean(Prefs.IDLE_PREVIEW, v).apply() }
+@@ -405,6 +419,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+     fun setKeepScreenOn(v: Boolean) { _keepScreenOn.value = v; prefs.edit().putBoolean(Prefs.KEEP_SCREEN_ON, v).apply() }
+     fun setAdvertiseVideo(v: Boolean) { _advertiseVideo.value = v; prefs.edit().putBoolean(Prefs.ADVERTISE_VIDEO, v).apply(); _applyByServerRestart() }
+     fun setAdvertiseAudio(v: Boolean) { _advertiseAudio.value = v; prefs.edit().putBoolean(Prefs.ADVERTISE_AUDIO, v).apply(); _applyByServerRestart() }
++    fun setAudioOnlyMode(v: Boolean) {
++        _audioOnlyMode.value = v
++        prefs.edit().putBoolean(Prefs.AUDIO_ONLY_MODE, v).apply()
++        if (v && !_advertiseAudio.value) setAdvertiseAudio(true) else _applyByServerRestart()
++    }
+     fun setLaunchOnConnect(v: Boolean) { _launchOnConnect.value = v; prefs.edit().putBoolean(Prefs.LAUNCH_ON_CONNECT, v).apply() }
+     fun setDebugEnabled(v: Boolean) { _debugEnabled.value = v; prefs.edit().putBoolean(Prefs.DEBUG_ENABLED, v).apply() }
+     fun setDeveloperOptions(v: Boolean) {
+@@ -551,6 +570,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+         service?.let {
+             _serverState.value = it.serverState.value
+             _connectionCount.value = it.connectionCount.value
++            _pendingApproval.value = it.pendingApproval.value
+             _videoAspect.value = it.videoAspect.value
+             _videoResolution.value = it.videoResolution.value
+             _audioOnly.value = it.audioOnly.value
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 9a17a5d..01cc4d9 100644
+index 9a17a5d..7dbcac2 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,6 @@
+@@ -1,17 +1,18 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">AirPlay Server</string>
@@ -48,3 +1125,65 @@ index 9a17a5d..01cc4d9 100644
  
      <!-- Notification -->
      <string name="notification_channel">AirPlay Service</string>
+-    <string name="notification_title">AirPlay Server Running</string>
+-    <string name="notification_text">Accepting AirPlay connections</string>
++    <string name="notification_title">FireMirror is ready</string>
++    <string name="notification_text">Ready for AirPlay connections</string>
+     <string name="notification_pin_title">AirPlay PIN Required</string>
+     <string name="notification_pin_text">PIN: %1$s</string>
+     <string name="stop_service">Stop</string>
+ 
+     <!-- Tabs -->
+     <string name="tab_overview">Overview</string>
++    <string name="tab_captures">Captures</string>
+     <string name="tab_logs">Logs</string>
+     <string name="tab_settings">Settings</string>
+ 
+@@ -26,6 +27,37 @@
+     <string name="btn_start">Start</string>
+     <string name="btn_stop">Stop</string>
+     <string name="unknown_track">Unknown</string>
++    <string name="home_ready">Ready to connect</string>
++    <string name="home_mirror_hint">On your Mac, open Control Center, then Screen Mirroring.</string>
++    <string name="home_mobile_hint">On iPhone or iPad, open Control Center, then Screen Mirroring.</string>
++    <string name="home_audio_hint">Choose FireMirror from the AirPlay audio menu on your Mac or iPhone.</string>
++    <string name="home_stopped">Receiver is off</string>
++    <string name="home_stopped_hint">Select Start to make this TV visible.</string>
++    <string name="home_error">Could not start</string>
++    <string name="home_error_hint">Check the network and server port in Settings.</string>
++    <string name="mode_mirror">Mirror screen</string>
++    <string name="mode_audio">Audio only</string>
++    <string name="mode_approval">Approve connections</string>
++    <string name="approval_title">Allow this connection?</string>
++    <string name="approval_message">A device at %1$s wants to connect. Allow it until FireMirror stops?</string>
++    <string name="approval_allow">Allow</string>
++    <string name="approval_deny">Deny</string>
++    <string name="cd_zoom_in">Zoom in</string>
++    <string name="cd_zoom_out">Zoom out</string>
++    <string name="cd_capture">Save screenshot</string>
++    <string name="cd_start_recording">Start recording</string>
++    <string name="cd_stop_recording">Stop recording</string>
++    <string name="recording_started">Recording started without sound</string>
++    <string name="capture_saved">Saved: %1$s</string>
++    <string name="capture_failed">Capture failed</string>
++    <string name="captures_title">Your captures</string>
++    <string name="captures_empty">Screenshots and recordings will appear here after you save one.</string>
++    <string name="captures_refresh">Refresh</string>
++    <string name="captures_share">Share</string>
++    <string name="captures_delete">Delete</string>
++    <string name="captures_cancel">Cancel</string>
++    <string name="captures_delete_title">Delete this capture?</string>
++    <string name="captures_delete_message">This removes %1$s from the Fire TV.</string>
+ 
+     <!-- Content descriptions -->
+     <string name="cd_pip">Picture-in-Picture</string>
+diff --git a/app/src/main/res/xml/file_paths.xml b/app/src/main/res/xml/file_paths.xml
+index d2e2c8d..95a614a 100644
+--- a/app/src/main/res/xml/file_paths.xml
++++ b/app/src/main/res/xml/file_paths.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <paths>
+     <cache-path name="cache" path="." />
++    <external-files-path name="captures" path="." />
+ </paths>
