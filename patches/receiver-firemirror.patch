@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 2604452..a4a52ef 100644
+index 2604452..955d73a 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -31,11 +31,11 @@ android {
@@ -12,11 +12,36 @@ index 2604452..a4a52ef 100644
          targetSdk = 36
 -        versionCode = 31
 -        versionName = "0.0.31"
-+        versionCode = 5
-+        versionName = "0.3.2"
++        versionCode = 6
++        versionName = "0.3.3"
  
          externalNativeBuild {
              cmake {
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index f42c86f..a2b4b4b 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -25,15 +25,17 @@
+         android:name=".AirPlayApp"
+         android:allowBackup="false"
+         android:usesCleartextTraffic="true"
+-        android:icon="@mipmap/ic_launcher"
+-        android:roundIcon="@mipmap/ic_launcher_round"
+-        android:banner="@drawable/banner"
++        android:icon="@drawable/firemirror_launcher_icon"
++        android:roundIcon="@drawable/firemirror_square_icon"
++        android:banner="@drawable/firemirror_banner"
+         android:label="@string/app_name"
+         android:supportsRtl="true"
+         android:theme="@style/Theme.AirPlayServer">
+ 
+         <activity
+             android:name=".MainActivity"
++            android:icon="@drawable/firemirror_launcher_icon"
++            android:banner="@drawable/firemirror_banner"
+             android:exported="true"
+             android:supportsPictureInPicture="true"
+             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
 diff --git a/app/src/main/cpp/android_raop_callbacks.c b/app/src/main/cpp/android_raop_callbacks.c
 index 3b3b618..314ec1a 100644
 --- a/app/src/main/cpp/android_raop_callbacks.c
@@ -1161,105 +1186,73 @@ index 197800c..03db32f 100644
              _videoAspect.value = it.videoAspect.value
              _videoResolution.value = it.videoResolution.value
              _audioOnly.value = it.audioOnly.value
-diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 9a17a5d..7dbcac2 100644
---- a/app/src/main/res/values/strings.xml
-+++ b/app/src/main/res/values/strings.xml
-@@ -1,17 +1,18 @@
- <?xml version="1.0" encoding="utf-8"?>
- <resources>
--    <string name="app_name">AirPlay Server</string>
-+    <string name="app_name">FireMirror</string>
- 
-     <!-- Notification -->
-     <string name="notification_channel">AirPlay Service</string>
--    <string name="notification_title">AirPlay Server Running</string>
--    <string name="notification_text">Accepting AirPlay connections</string>
-+    <string name="notification_title">FireMirror is ready</string>
-+    <string name="notification_text">Ready for AirPlay connections</string>
-     <string name="notification_pin_title">AirPlay PIN Required</string>
-     <string name="notification_pin_text">PIN: %1$s</string>
-     <string name="stop_service">Stop</string>
- 
-     <!-- Tabs -->
-     <string name="tab_overview">Overview</string>
-+    <string name="tab_captures">Captures</string>
-     <string name="tab_logs">Logs</string>
-     <string name="tab_settings">Settings</string>
- 
-@@ -26,6 +27,37 @@
-     <string name="btn_start">Start</string>
-     <string name="btn_stop">Stop</string>
-     <string name="unknown_track">Unknown</string>
-+    <string name="home_ready">Ready to connect</string>
-+    <string name="home_mirror_hint">On your Mac, open Control Center, then Screen Mirroring.</string>
-+    <string name="home_mobile_hint">On iPhone or iPad, open Control Center, then Screen Mirroring.</string>
-+    <string name="home_audio_hint">Choose FireMirror from the AirPlay audio menu on your Mac or iPhone.</string>
-+    <string name="home_stopped">Receiver is off</string>
-+    <string name="home_stopped_hint">Select Start to make this TV visible.</string>
-+    <string name="home_error">Could not start</string>
-+    <string name="home_error_hint">Check the network and server port in Settings.</string>
-+    <string name="mode_mirror">Mirror screen</string>
-+    <string name="mode_audio">Audio only</string>
-+    <string name="mode_approval">Approve connections</string>
-+    <string name="approval_title">Allow this connection?</string>
-+    <string name="approval_message">A device at %1$s wants to connect. Allow it until FireMirror stops?</string>
-+    <string name="approval_allow">Allow</string>
-+    <string name="approval_deny">Deny</string>
-+    <string name="cd_zoom_in">Zoom in</string>
-+    <string name="cd_zoom_out">Zoom out</string>
-+    <string name="cd_capture">Save screenshot</string>
-+    <string name="cd_start_recording">Start recording</string>
-+    <string name="cd_stop_recording">Stop recording</string>
-+    <string name="recording_started">Recording started without sound</string>
-+    <string name="capture_saved">Saved: %1$s</string>
-+    <string name="capture_failed">Capture failed</string>
-+    <string name="captures_title">Your captures</string>
-+    <string name="captures_empty">Screenshots and recordings will appear here after you save one.</string>
-+    <string name="captures_refresh">Refresh</string>
-+    <string name="captures_share">Share</string>
-+    <string name="captures_delete">Delete</string>
-+    <string name="captures_cancel">Cancel</string>
-+    <string name="captures_delete_title">Delete this capture?</string>
-+    <string name="captures_delete_message">This removes %1$s from the Fire TV.</string>
- 
-     <!-- Content descriptions -->
-     <string name="cd_pip">Picture-in-Picture</string>
-diff --git a/app/src/main/res/xml/file_paths.xml b/app/src/main/res/xml/file_paths.xml
-index d2e2c8d..95a614a 100644
---- a/app/src/main/res/xml/file_paths.xml
-+++ b/app/src/main/res/xml/file_paths.xml
-@@ -1,4 +1,5 @@
- <?xml version="1.0" encoding="utf-8"?>
- <paths>
-     <cache-path name="cache" path="." />
-+    <external-files-path name="captures" path="." />
- </paths>
-diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
-index f42c86f..83a37bc 100644
---- a/app/src/main/AndroidManifest.xml
-+++ b/app/src/main/AndroidManifest.xml
-@@ -25,15 +25,17 @@
-         android:name=".AirPlayApp"
-         android:allowBackup="false"
-         android:usesCleartextTraffic="true"
--        android:icon="@mipmap/ic_launcher"
--        android:roundIcon="@mipmap/ic_launcher_round"
--        android:banner="@drawable/banner"
-+        android:icon="@drawable/firemirror_launcher_icon"
-+        android:roundIcon="@drawable/firemirror_launcher_icon"
-+        android:banner="@drawable/firemirror_banner"
-         android:label="@string/app_name"
-         android:supportsRtl="true"
-         android:theme="@style/Theme.AirPlayServer">
- 
-         <activity
-             android:name=".MainActivity"
-+            android:icon="@drawable/firemirror_launcher_icon"
-+            android:banner="@drawable/firemirror_banner"
-             android:exported="true"
-             android:supportsPictureInPicture="true"
-             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+diff --git a/app/src/main/res/drawable/banner.xml b/app/src/main/res/drawable/banner.xml
+index 8bc6ed6..284f8e5 100644
+--- a/app/src/main/res/drawable/banner.xml
++++ b/app/src/main/res/drawable/banner.xml
+@@ -3,37 +3,30 @@
+     android:height="180dp"
+     android:viewportWidth="320"
+     android:viewportHeight="180">
+-
++    <path android:fillColor="#101817" android:pathData="M0,0 H320 V180 H0 Z" />
++    <path android:fillColor="#1E2A27"
++        android:pathData="M12,10 H308 C309.1,10 310,10.9 310,12 V168 C310,169.1 309.1,170 308,170 H12 C10.9,170 10,169.1 10,168 V12 C10,10.9 10.9,10 12,10 Z" />
++    <path android:fillColor="#31504A" android:pathData="M10,10 H16 V170 H10 Z" />
+     <path
+-        android:fillColor="#FFFFFF"
+-        android:pathData="M0,0h320v180H0z" />
+-
+-    <group
+-        android:scaleX="0.1875"
+-        android:scaleY="0.1875"
+-        android:translateX="70">
+-        <group
+-            android:pivotX="480"
+-            android:pivotY="480"
+-            android:scaleX="0.5"
+-            android:scaleY="0.5">
+-            <group
+-                android:translateX="16"
+-                android:translateY="16">
+-                <path
+-                    android:fillColor="#C0C0C0"
+-                    android:pathData="m240,840 l240,-240 l240,240L240,840ZM80,680v-480q0,-33 23.5,-56.5T160,120h640q33,0 56.5,23.5T880,200v480q0,33 -23.5,56.5T800,760H680v-80h120v-480H160v480h120v80H160q-33,0 -56.5,-23.5T80,680Zm400,-200Z" />
+-            </group>
+-            <group
+-                android:translateX="12"
+-                android:translateY="12">
+-                <path
+-                    android:fillColor="#9E9E9E"
+-                    android:pathData="m240,840 l240,-240 l240,240L240,840ZM80,680v-480q0,-33 23.5,-56.5T160,120h640q33,0 56.5,23.5T880,200v480q0,33 -23.5,56.5T800,760H680v-80h120v-480H160v480h120v80H160q-33,0 -56.5,-23.5T80,680Zm400,-200Z" />
+-            </group>
+-            <path
+-                android:fillColor="#424242"
+-                android:pathData="m240,840 l240,-240 l240,240L240,840ZM80,680v-480q0,-33 23.5,-56.5T160,120h640q33,0 56.5,23.5T880,200v480q0,33 -23.5,56.5T800,760H680v-80h120v-480H160v480h120v80H160q-33,0 -56.5,-23.5T80,680Zm400,-200Z" />
+-        </group>
+-    </group>
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#76DFD1"
++        android:strokeWidth="6"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:pathData="M55,59 H100 C104.4,59 108,62.6 108,67 V113 C108,117.4 104.4,121 100,121 H81" />
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#76DFD1"
++        android:strokeWidth="6"
++        android:strokeLineCap="round"
++        android:pathData="M38,92 C52.4,92 64,103.6 64,118 M38,105 C45.2,105 51,110.8 51,118" />
++    <path android:fillColor="#76DFD1"
++        android:pathData="M38,113 A5,5 0,1 1,38,123 A5,5 0,1 1,38,113 Z" />
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="#F0F6F3"
++        android:strokeWidth="3.3"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:pathData="M126,102 V78 H138 M126,90 H136 M143,78 H152 M147.5,78 V102 M143,102 H152 M158,102 V78 H166 C171,78 173,81 173,85 C173,89 170,91 166,91 H158 M166,91 L174,102 M180,78 H190 M180,78 V102 H190 M180,90 H188 M197,102 V78 L204,90 L211,78 V102 M217,78 H226 M221.5,78 V102 M217,102 H226 M232,102 V78 H240 C245,78 247,81 247,85 C247,89 244,91 240,91 H232 M240,91 L248,102 M254,102 V78 H262 C267,78 269,81 269,85 C269,89 266,91 262,91 H254 M262,91 L270,102 M278,78 H284 C288,78 291,81 291,85 V95 C291,99 288,102 284,102 H278 C274,102 272,99 272,95 V85 C272,81 274,78 278,78 M297,102 V78 H305 C310,78 312,81 312,85 C312,89 309,91 305,91 H297 M305,91 L313,102" />
+ </vector>
 diff --git a/app/src/main/res/drawable/firemirror_banner.png b/app/src/main/res/drawable/firemirror_banner.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..7ec7c230e64dea64ea468b3efff34795393a6b87
@@ -1449,6 +1442,181 @@ literal 0
 HcmV?d00001
 
 diff --git a/app/src/main/res/drawable/firemirror_launcher_icon.png b/app/src/main/res/drawable/firemirror_launcher_icon.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..69da0b75cfb43f614351afd438dfb2f4514d9b4e
+GIT binary patch
+literal 11194
+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
+R3J?*df9}%R+%q=!{|~YehJOG6
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable/firemirror_square_icon.png b/app/src/main/res/drawable/firemirror_square_icon.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..c42155f3dae165e2466ce8c688bf1eb84a670f20
 GIT binary patch
@@ -1709,73 +1877,6 @@ U-~F5ZPY9r+@$f;7x_#9D0^`W2^Z)<=
 literal 0
 HcmV?d00001
 
-diff --git a/app/src/main/res/drawable/banner.xml b/app/src/main/res/drawable/banner.xml
-index 8bc6ed6..284f8e5 100644
---- a/app/src/main/res/drawable/banner.xml
-+++ b/app/src/main/res/drawable/banner.xml
-@@ -3,37 +3,30 @@
-     android:height="180dp"
-     android:viewportWidth="320"
-     android:viewportHeight="180">
--
-+    <path android:fillColor="#101817" android:pathData="M0,0 H320 V180 H0 Z" />
-+    <path android:fillColor="#1E2A27"
-+        android:pathData="M12,10 H308 C309.1,10 310,10.9 310,12 V168 C310,169.1 309.1,170 308,170 H12 C10.9,170 10,169.1 10,168 V12 C10,10.9 10.9,10 12,10 Z" />
-+    <path android:fillColor="#31504A" android:pathData="M10,10 H16 V170 H10 Z" />
-     <path
--        android:fillColor="#FFFFFF"
--        android:pathData="M0,0h320v180H0z" />
--
--    <group
--        android:scaleX="0.1875"
--        android:scaleY="0.1875"
--        android:translateX="70">
--        <group
--            android:pivotX="480"
--            android:pivotY="480"
--            android:scaleX="0.5"
--            android:scaleY="0.5">
--            <group
--                android:translateX="16"
--                android:translateY="16">
--                <path
--                    android:fillColor="#C0C0C0"
--                    android:pathData="m240,840 l240,-240 l240,240L240,840ZM80,680v-480q0,-33 23.5,-56.5T160,120h640q33,0 56.5,23.5T880,200v480q0,33 -23.5,56.5T800,760H680v-80h120v-480H160v480h120v80H160q-33,0 -56.5,-23.5T80,680Zm400,-200Z" />
--            </group>
--            <group
--                android:translateX="12"
--                android:translateY="12">
--                <path
--                    android:fillColor="#9E9E9E"
--                    android:pathData="m240,840 l240,-240 l240,240L240,840ZM80,680v-480q0,-33 23.5,-56.5T160,120h640q33,0 56.5,23.5T880,200v480q0,33 -23.5,56.5T800,760H680v-80h120v-480H160v480h120v80H160q-33,0 -56.5,-23.5T80,680Zm400,-200Z" />
--            </group>
--            <path
--                android:fillColor="#424242"
--                android:pathData="m240,840 l240,-240 l240,240L240,840ZM80,680v-480q0,-33 23.5,-56.5T160,120h640q33,0 56.5,23.5T880,200v480q0,33 -23.5,56.5T800,760H680v-80h120v-480H160v480h120v80H160q-33,0 -56.5,-23.5T80,680Zm400,-200Z" />
--        </group>
--    </group>
-+        android:fillColor="@android:color/transparent"
-+        android:strokeColor="#76DFD1"
-+        android:strokeWidth="6"
-+        android:strokeLineCap="round"
-+        android:strokeLineJoin="round"
-+        android:pathData="M55,59 H100 C104.4,59 108,62.6 108,67 V113 C108,117.4 104.4,121 100,121 H81" />
-+    <path
-+        android:fillColor="@android:color/transparent"
-+        android:strokeColor="#76DFD1"
-+        android:strokeWidth="6"
-+        android:strokeLineCap="round"
-+        android:pathData="M38,92 C52.4,92 64,103.6 64,118 M38,105 C45.2,105 51,110.8 51,118" />
-+    <path android:fillColor="#76DFD1"
-+        android:pathData="M38,113 A5,5 0,1 1,38,123 A5,5 0,1 1,38,113 Z" />
-+    <path
-+        android:fillColor="@android:color/transparent"
-+        android:strokeColor="#F0F6F3"
-+        android:strokeWidth="3.3"
-+        android:strokeLineCap="round"
-+        android:strokeLineJoin="round"
-+        android:pathData="M126,102 V78 H138 M126,90 H136 M143,78 H152 M147.5,78 V102 M143,102 H152 M158,102 V78 H166 C171,78 173,81 173,85 C173,89 170,91 166,91 H158 M166,91 L174,102 M180,78 H190 M180,78 V102 H190 M180,90 H188 M197,102 V78 L204,90 L211,78 V102 M217,78 H226 M221.5,78 V102 M217,102 H226 M232,102 V78 H240 C245,78 247,81 247,85 C247,89 244,91 240,91 H232 M240,91 L248,102 M254,102 V78 H262 C267,78 269,81 269,85 C269,89 266,91 262,91 H254 M262,91 L270,102 M278,78 H284 C288,78 291,81 291,85 V95 C291,99 288,102 284,102 H278 C274,102 272,99 272,95 V85 C272,81 274,78 278,78 M297,102 V78 H305 C310,78 312,81 312,85 C312,89 309,91 305,91 H297 M305,91 L313,102" />
- </vector>
 diff --git a/app/src/main/res/drawable/ic_launcher_background.xml b/app/src/main/res/drawable/ic_launcher_background.xml
 index e2c8a65..158cd72 100644
 --- a/app/src/main/res/drawable/ic_launcher_background.xml
@@ -1883,3 +1984,77 @@ index cb3af28..2736038 100644
 +        android:fillColor="#000000"
 +        android:pathData="M24,73.5 A4.5,4.5 0,1 1,24,82.5 A4.5,4.5 0,1 1,24,73.5 Z" />
  </vector>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 9a17a5d..7dbcac2 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,17 +1,18 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">AirPlay Server</string>
++    <string name="app_name">FireMirror</string>
+ 
+     <!-- Notification -->
+     <string name="notification_channel">AirPlay Service</string>
+-    <string name="notification_title">AirPlay Server Running</string>
+-    <string name="notification_text">Accepting AirPlay connections</string>
++    <string name="notification_title">FireMirror is ready</string>
++    <string name="notification_text">Ready for AirPlay connections</string>
+     <string name="notification_pin_title">AirPlay PIN Required</string>
+     <string name="notification_pin_text">PIN: %1$s</string>
+     <string name="stop_service">Stop</string>
+ 
+     <!-- Tabs -->
+     <string name="tab_overview">Overview</string>
++    <string name="tab_captures">Captures</string>
+     <string name="tab_logs">Logs</string>
+     <string name="tab_settings">Settings</string>
+ 
+@@ -26,6 +27,37 @@
+     <string name="btn_start">Start</string>
+     <string name="btn_stop">Stop</string>
+     <string name="unknown_track">Unknown</string>
++    <string name="home_ready">Ready to connect</string>
++    <string name="home_mirror_hint">On your Mac, open Control Center, then Screen Mirroring.</string>
++    <string name="home_mobile_hint">On iPhone or iPad, open Control Center, then Screen Mirroring.</string>
++    <string name="home_audio_hint">Choose FireMirror from the AirPlay audio menu on your Mac or iPhone.</string>
++    <string name="home_stopped">Receiver is off</string>
++    <string name="home_stopped_hint">Select Start to make this TV visible.</string>
++    <string name="home_error">Could not start</string>
++    <string name="home_error_hint">Check the network and server port in Settings.</string>
++    <string name="mode_mirror">Mirror screen</string>
++    <string name="mode_audio">Audio only</string>
++    <string name="mode_approval">Approve connections</string>
++    <string name="approval_title">Allow this connection?</string>
++    <string name="approval_message">A device at %1$s wants to connect. Allow it until FireMirror stops?</string>
++    <string name="approval_allow">Allow</string>
++    <string name="approval_deny">Deny</string>
++    <string name="cd_zoom_in">Zoom in</string>
++    <string name="cd_zoom_out">Zoom out</string>
++    <string name="cd_capture">Save screenshot</string>
++    <string name="cd_start_recording">Start recording</string>
++    <string name="cd_stop_recording">Stop recording</string>
++    <string name="recording_started">Recording started without sound</string>
++    <string name="capture_saved">Saved: %1$s</string>
++    <string name="capture_failed">Capture failed</string>
++    <string name="captures_title">Your captures</string>
++    <string name="captures_empty">Screenshots and recordings will appear here after you save one.</string>
++    <string name="captures_refresh">Refresh</string>
++    <string name="captures_share">Share</string>
++    <string name="captures_delete">Delete</string>
++    <string name="captures_cancel">Cancel</string>
++    <string name="captures_delete_title">Delete this capture?</string>
++    <string name="captures_delete_message">This removes %1$s from the Fire TV.</string>
+ 
+     <!-- Content descriptions -->
+     <string name="cd_pip">Picture-in-Picture</string>
+diff --git a/app/src/main/res/xml/file_paths.xml b/app/src/main/res/xml/file_paths.xml
+index d2e2c8d..95a614a 100644
+--- a/app/src/main/res/xml/file_paths.xml
++++ b/app/src/main/res/xml/file_paths.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <paths>
+     <cache-path name="cache" path="." />
++    <external-files-path name="captures" path="." />
+ </paths>

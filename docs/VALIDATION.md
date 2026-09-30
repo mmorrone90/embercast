@@ -76,8 +76,8 @@ The live session revealed that a Fire TV remote Select press did not restore con
 
 Mac audio output, connection approval during full AirPlay pairing, iPhone and iPad traffic, and long running stability have not been verified. Google Cast is not implemented, and Miracast is a separate Fire TV system feature.
 
-## FireMirror 0.3.2 artwork
+## FireMirror 0.3.3 artwork
 
-The receiver APK built with a new PNG launcher icon and 320 × 180 TV banner. `aapt dump badging` reported both PNG resources as the installed app artwork, and Android package management reported version `0.3.2` on the Fire TV Stick. The redesigned Overview screen and its icons were visually inspected after the update; the receiver started on port 7100.
+The receiver APK includes a rectangular 1280 × 720 launcher icon, a matching 320 × 180 TV banner, and a separate square round icon. [Amazon's Fire TV Appstore guidance](https://developer.amazon.com/docs/app-submission/appstore-details.html#guidelines_firetv_app_icon) specifies a 1280 × 720 PNG app icon for the Fire TV app row. [Android TV guidance](https://developer.android.com/training/tv/get-started/create#banner) specifies a 320 × 180 banner with text. The manifest points the application and launch activity at the rectangular artwork.
 
-The Fire TV Apps & Channels tile still showed the older monitor artwork after an update and a clean reinstall. The existing screenshot, recording, and settings were backed up and restored around that reinstall. The stale tile is an observed launcher issue; fresh device launcher rendering of the new PNG banner has not been confirmed.
+The Fire TV reports version `0.3.3`, and `aapt dump badging` reports `firemirror_launcher_icon.png` as its application icon and `firemirror_banner.png` as its banner. The Fire TV Apps & Channels tile still showed the older monitor artwork after the update. It also showed that artwork after an earlier clean reinstall of version 0.3.2, so this device's launcher has not been observed rendering the new assets. The existing screenshot, recording, and settings were backed up and restored around that earlier reinstall.
