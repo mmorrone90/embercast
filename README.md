@@ -1,53 +1,47 @@
 # FireMirror
 
-A native Kotlin TV application for a personal Mac to Fire TV mirroring receiver.
+FireMirror is a local Mac to Fire TV screen mirroring prototype. Its receiver uses the pinned [Android AirPlay Server](https://github.com/jqssun/android-airplay-server) source and UxPlay protocol implementation. The original Kotlin TV interface remains in `app/` as the Phase 1 prototype; the functional receiver build is in `receiver/`.
 
-**Current deliverable: Phase 1. This APK does not receive AirPlay or advertise itself in macOS Screen Mirroring.** The interface states this explicitly. No dummy service, simulated connection, or invented protocol implementation is included.
+On 30 September 2026, the receiver baseline started on an Amazon Fire TV Stick (3rd Gen), advertised itself to a Mac over Bonjour, and displayed the Mac desktop on the TV. This is a device test, not a promise of compatibility with every Mac, Fire TV, codec, or protected video service. Audio and sustained performance have not yet been verified.
 
-## Included
+## Build the receiver
 
-Fullscreen landscape interface with TV launcher integration, visible remote focus, a saved receiver name, local IPv4 monitoring for WiFi and Ethernet, and device and video codec diagnostics. The network monitor supports LANs without internet. Settings currently expose receiver name and diagnostic logging. Video, audio, resolution, hardware decoding, and automatic receiver startup remain future stages.
-
-The application uses Android Views and Kotlin. It has no Google Play Services dependency, accounts, advertising, analytics, cloud calls, or native binaries. The only app runtime dependency is Kotlin's standard library. Internet access is not requested in this build.
-
-## Requirements
-
-Android based Fire OS with Android API 24 or newer. Older Fire OS 5 devices are excluded. Vega OS devices need a separate application format and SDK; this Android APK targets Fire OS. Confirm the operating system in the device's About page before installing. See the [Amazon platform overview](https://developer.amazon.com/en/apps-and-games/fire-tv) and [Vega app submission documentation](https://developer.amazon.com/docs/vega/0.21/app-submission.html).
-
-## Build
-
-Open this directory in Android Studio, or use JDK 17 and an Android SDK with platform 35 and Build Tools 35.0.0 installed. Gradle 8.11.1, Android Gradle Plugin 8.10.1, and Kotlin 2.1.0 are pinned. The wrapper verifies the Gradle distribution SHA256.
+Install JDK 17 and the Android SDK with platform 36 and CMake. The upstream build uses NDK 27.0.12077973 and Gradle can install it when its SDK license is accepted. Clone this repository with submodules or let the build script initialize them:
 
 ```sh
-export JAVA_HOME=/opt/homebrew/opt/openjdk@17
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-./gradlew :app:assembleDebug :app:lintDebug
+git clone https://github.com/mmorrone90/firemirror.git
+cd firemirror
+./scripts/build-receiver.sh
 ```
 
-Use your JDK and SDK locations on other machines. Android Studio can write your ignored `local.properties`, or create it with `sdk.dir=/absolute/path/to/android/sdk`. The generated APK is `app/build/outputs/apk/debug/app-debug.apk`.
+The script pins the upstream receiver, applies `patches/receiver-firemirror.patch`, builds the APK, and writes `dist/FireMirror-receiver-debug.apk`. The patch sets the app ID to `dev.firemirror.tv`, the visible receiver name to `FireMirror`, and the default listener port to 7100. Fire OS already uses port 7000 on the tested device. Automatic server start when the app opens remains enabled; automatic start at device boot is disabled.
 
-The debug APK is signed by Android's local debug keystore. Updates must use the same signing key. CI builds on a fresh machine can have a different debug key; preserve a stable private signing key for future distributed builds. No signing secrets are shipped in this source.
+The APK is signed by the local Android debug keystore. Keep that key for updates that preserve app data. A build on another computer normally has a different debug key and will not install as an update over this build.
 
-## Install and test
+## Install on the Fire TV
 
-Follow [Fire TV installation](docs/INSTALL.md). The [Phase 1 checklist](docs/PHASES.md) is the acceptance gate before network receiver work. [Validation](docs/VALIDATION.md) records the checks performed for this delivery.
+Enable ADB Debugging on the Fire TV and connect from a Mac on the same LAN. Replace `FIRE_TV_IP` with the address shown under Fire TV Settings → My Fire TV → About → Network.
 
 ```sh
 adb connect FIRE_TV_IP:5555
-adb -s FIRE_TV_IP:5555 install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/.MainActivity
+adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
+adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/io.github.jqssun.airplay.MainActivity
 ```
 
-## Receiver direction
+Accept the debugging prompt on the TV. Leave FireMirror open. On the Mac, open Control Center → Screen Mirroring → FireMirror. The TV and Mac must be able to reach each other on the local network. No account, cloud server, or internet route is required for the mirroring protocol.
 
-The recommended implementation is the protocol and Android bridge from [Android AirPlay Server](https://github.com/jqssun/android-airplay-server), using UxPlay through JNI and Android hardware decoding. Selection is based on inspected source and upstream reports. It is not yet integrated or verified with this Mac or a Fire TV.
+If the app starts but the Mac does not list it, inspect the local service and device log:
 
-Read the [feasibility assessment](docs/FEASIBILITY.md) for alternatives, licensing, encryption, known issues, and the [architecture](docs/ARCHITECTURE.md) for integration boundaries. The Mac inspected for this task runs macOS 26.5.2 on arm64. No Fire TV was connected through ADB during development.
+```sh
+dns-sd -B _airplay._tcp local.
+dns-sd -L FireMirror _airplay._tcp local.
+adb -s FIRE_TV_IP:5555 logcat -v time 'AirPlayService:I' 'NsdServiceManager:I' '*:S'
+```
 
-## Source layout
+For detailed ADB setup, updates, and removal, see [installation instructions](docs/INSTALL.md). [Validation](docs/VALIDATION.md) records exactly what has been observed on the tested device. [Phases](docs/PHASES.md) lists the remaining acceptance work.
 
-`app/src/main/java/dev/firemirror/tv` holds activities, preferences, network monitoring, receiver state, and codec diagnostics. `app/src/main/res` holds native layouts, focus styles, icon, and the TV banner. `docs` contains the staged development and testing plan. `scripts/install.sh` provides explicit ADB installation. GitHub Actions builds and lints the project without publishing anything.
+## Source and licensing
 
-## License
+`receiver/` is pinned to Android AirPlay Server revision `c8defdd70d7e6a04f4f1b71d353653682d594106`. Its native dependencies are pinned through its own submodules. The patch contains FireMirror branding, package ID, version, port, and boot behavior. The receiver and its components retain their upstream licenses and notices. This repository is GPL version 3 only; see [notices](NOTICE.md) and the upstream source. When distributing an APK, distribute the corresponding source, patch, dependency revisions, and build scripts.
 
-GPL version 3 only. See `LICENSE` and `NOTICE.md`. No receiver implementation is vendored in Phase 1. Future integration must preserve the receiver's copyright notices, component licenses, and corresponding source obligations. AirPlay is Apple's trademark; this project is not affiliated with Apple or Amazon.
+This project is for ordinary desktop mirroring. Protected streaming content and DRM bypass are outside scope. AirPlay, macOS, and Mac are Apple trademarks; Fire TV is an Amazon trademark. The project is not affiliated with Apple or Amazon.

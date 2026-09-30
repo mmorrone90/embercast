@@ -1,8 +1,8 @@
 # Delivery validation
 
-Build and emulator validation completed on 28 September 2026. Physical Fire TV smoke testing completed on 30 September 2026. This document records Phase 1 only.
+Phase 1 build and emulator validation completed on 28 September 2026. Fire TV tests and receiver prototype work followed on 30 September 2026.
 
-## Build and package
+## Phase 1 build and package
 
 The following command completed successfully with JDK 17 and the installed Android SDK:
 
@@ -16,7 +16,7 @@ The APK signature was verified with Android Build Tools 35.0.0 `apksigner`. It h
 
 Only ACCESS_NETWORK_STATE is requested. No INTERNET permission or native library is present. The installer script passed `bash -n` syntax validation.
 
-## Runtime
+## Phase 1 emulator runtime
 
 The APK was installed and launched on an isolated arm64 Android API 36.1 emulator configured with a 1920 × 1080 TV display profile and density 320. It uses a Google APIs phone system image with a TV display profile; it is not a Fire OS or Android TV firmware emulator.
 
@@ -42,7 +42,7 @@ Seventeen checks passed across the interface and network tests:
 
 The main screen screenshot was visually inspected. Focus visibility and layout were checked through emulator directional input and UI hierarchy snapshots. Emulator addresses are test addresses, not a Fire TV address.
 
-## Physical Fire TV smoke test
+## Phase 1 physical Fire TV smoke test
 
 The APK installed successfully over ADB on an Amazon Fire TV Stick (3rd Gen), model `AFTSSS`, running Fire OS 7 and Android 9 (API 28). The device reported a 32 bit `armeabi-v7a` userspace. The main activity launched successfully at 1920 × 1080, displayed the TV's actual LAN address, and showed the expected unavailable receiver and stream states. The main screen was visually inspected from a device screenshot.
 
@@ -50,4 +50,14 @@ Remote directional and Select input opened Settings and Diagnostics, and Back re
 
 This is a smoke test, not completion of the full Phase 1 device acceptance gate. Receiver name editing and persistence, input validation, diagnostic logging, network disconnect and reconnect behavior, and launcher discovery were not retested on the physical Fire TV. The local Mac version was inspected, but no Mac to receiver mirroring connection was attempted because Phase 1 has no receiver.
 
-mDNS advertisement, AirPlay pairing, media transport, hardware video playback, audio synchronization, real FPS, and latency are not implemented or verified by this delivery. Follow PHASES.md before proceeding.
+The Phase 1 APK does not implement mDNS, AirPlay, or playback. It has been superseded on the tested Fire TV by the receiver prototype below.
+
+## Receiver prototype on the Fire TV
+
+The pinned Android AirPlay Server source at `c8defdd70d7e6a04f4f1b71d353653682d594106` built successfully with its native submodules. Its unmodified default server port 7000 failed to start because that port was already occupied on this Fire TV. Port 7100 started successfully. The receiver registered `_airplay._tcp` and `_raop._tcp` as FireMirror, and macOS `dns-sd` discovered both services. The Mac resolved FireMirror to `Android.local.:7100` with AirPlay capability TXT data and successfully opened a TCP connection to the Fire TV on port 7100.
+
+During the baseline receiver test, the Fire TV displayed the Mac desktop, including its wallpaper and menu bar, in a device screenshot. That confirms discovery, connection, transport, and rendered video for this Mac and Fire TV. The test did not establish an actual frame rate, latency, codec, decoder mode, audio output, long running stability, or reconnect behavior.
+
+The FireMirror build script applied the checked in patch to use package `dev.firemirror.tv`, version `0.2.0`, receiver name FireMirror, port 7100, and no start at boot. The branded APK built successfully and its signature matched the earlier prototype's local debug signature. It updated the original package on the Fire TV, launched, started its server on port 7100, registered both discovery services, and displayed its waiting screen. macOS discovered the branded build's FireMirror service. A complete Mac to branded build playback test is still pending.
+
+The upstream receiver's `lintDebug` task did not pass: it reported 29 errors and 105 warnings, beginning with an inherited service `onStartCommand` super call warning. The receiver APK build and device smoke tests passed; lint cleanup remains separate work. The repository CI continues to lint the Phase 1 module and build the receiver APK.

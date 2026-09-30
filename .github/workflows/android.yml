@@ -3,17 +3,21 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :app:assembleDebug :app:lintDebug
+      - run: ./scripts/build-receiver.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: FireMirror-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: FireMirror-receiver-debug
+          path: dist/FireMirror-receiver-debug.apk

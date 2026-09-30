@@ -1,14 +1,14 @@
 # AirPlay receiver feasibility
 
-Research date: 28 September 2026. The target Mac was inspected locally: macOS 26.5.2, build 25F84, arm64. The Fire TV model, operating system, and decoder behavior are unverified.
+Initial research date: 28 September 2026. The target Mac was inspected locally: macOS 26.5.2, build 25F84, arm64. On 30 September, an Amazon Fire TV Stick (3rd Gen) running Fire OS 7 and Android API 28 was connected and tested. Actual video decoder selection remains unverified.
 
 ## Decision
 
-Use the existing UxPlay protocol implementation through an Android adaptation. The preferred starting point is [jqssun/android-airplay-server](https://github.com/jqssun/android-airplay-server), revision `c8defdd70d7e6a04f4f1b71d353653682d594106`, observed as main during research. Its source already includes an Android DNS discovery shim, JNI callbacks, native protocol build, and media renderers. This is a proposed integration, not code included in Phase 1.
+Use the existing UxPlay protocol implementation through an Android adaptation. The selected source is [jqssun/android-airplay-server](https://github.com/jqssun/android-airplay-server), revision `c8defdd70d7e6a04f4f1b71d353653682d594106`, pinned in the `receiver/` submodule and configured by the checked in FireMirror patch. Its source includes an Android DNS discovery shim, JNI callbacks, native protocol build, and media renderers. The earlier Phase 1 interface did not include this code; the receiver prototype now does.
 
 Upstream reports Android 7+, Android TV, macOS senders, H.264/HEVC mirroring, AAC/ALAC audio, and optional PIN pairing. It builds native libraries for both ARM ABIs and x86_64. The Kotlin video path uses MediaCodec. Native audio includes Oboe and an FFmpeg ALAC decoder. There is no need to port the desktop GStreamer application wholesale. These claims and components were checked against the [README](https://github.com/jqssun/android-airplay-server/blob/c8defdd70d7e6a04f4f1b71d353653682d594106/README.md), [Android build](https://github.com/jqssun/android-airplay-server/blob/c8defdd70d7e6a04f4f1b71d353653682d594106/app/build.gradle.kts), and [CMake source](https://github.com/jqssun/android-airplay-server/blob/c8defdd70d7e6a04f4f1b71d353653682d594106/app/src/main/cpp/CMakeLists.txt).
 
-Fire OS compatibility is an inference from Android APIs and ABI support, not a verified device result. Fire OS 6 and newer Android based devices may meet API 24; older Fire OS 5 devices do not. Check the actual API using ADB. Vega OS is a separate target requiring its own package and SDK. [Amazon distinguishes Fire OS Android binaries from Vega VPKGs](https://developer.amazon.com/docs/app-submission/target-app.html).
+This particular Fire OS 7 device has now built and run the receiver, advertised itself to the Mac, and displayed the Mac desktop. Compatibility with other Fire TV models remains an inference from Android APIs and ABI support. Fire OS 6 and newer Android based devices may meet API 24; older Fire OS 5 devices do not. Check the actual API using ADB. Vega OS is a separate target requiring its own package and SDK. [Amazon distinguishes Fire OS Android binaries from Vega VPKGs](https://developer.amazon.com/docs/app-submission/target-app.html).
 
 ## Alternatives
 
@@ -50,6 +50,6 @@ Adopting GPL receiver code requires preserving its license and component notices
 
 No protected content decryption or DRM bypass is implemented. Tests target unprotected desktop output. Protected streaming applications may display a black region or refuse playback; that is outside scope.
 
-## Evidence needed before proceeding
+## Remaining evidence
 
-First pass Phase 1 on the real TV. Then compile and test the pinned upstream receiver baseline before integrating substantial native code. Record the Fire TV model, API, ABI, OS build, Mac version, negotiated codec, protocol logs, and actual playback result. A positive report for iOS, another Mac version, or a different TV is useful evidence, not a substitute for this test.
+The pinned upstream baseline built and mirrored this Mac to the Fire TV after moving from occupied port 7000 to 7100. The FireMirror branded build started and advertised on the same device. Complete a fresh branded connection test, then record the negotiated codec, decoder in use, audio behavior, frame rate, latency, reconnect behavior, and sustained playback. A positive report for iOS, another Mac version, or a different TV is useful evidence, not a substitute for this test.

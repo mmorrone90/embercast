@@ -7,13 +7,13 @@ fi
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 device="$1"
 case "$device" in *:*) ;; *) device="${device}:5555" ;; esac
-apk="${2:-$project_dir/app/build/outputs/apk/debug/app-debug.apk}"
+apk="${2:-$project_dir/dist/FireMirror-receiver-debug.apk}"
 if ! command -v adb >/dev/null; then
     echo 'Add Android SDK platform-tools to PATH first.' >&2
     exit 1
 fi
 if [ ! -f "$apk" ]; then
-    echo "APK not found: $apk. Build with ./gradlew :app:assembleDebug" >&2
+    echo "APK not found: $apk. Build with ./scripts/build-receiver.sh" >&2
     exit 1
 fi
 adb connect "$device"
@@ -28,4 +28,4 @@ if [ "$api" -lt 24 ]; then
     exit 1
 fi
 adb -s "$device" install -r "$apk"
-adb -s "$device" shell am start -n dev.firemirror.tv/.MainActivity
+adb -s "$device" shell am start -n dev.firemirror.tv/io.github.jqssun.airplay.MainActivity

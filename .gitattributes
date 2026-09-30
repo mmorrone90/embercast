@@ -2,3 +2,5 @@
 *.bat text eol=crlf
 *.png binary
 *.jar binary
+# Unified diff context contains a single space on otherwise empty lines.
+patches/*.patch whitespace=-blank-at-eol

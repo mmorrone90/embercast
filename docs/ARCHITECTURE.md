@@ -12,6 +12,12 @@ The app is a single Android application module. Native Android Views avoid an ex
 
 Only ACCESS_NETWORK_STATE is requested. No network service is running, no mDNS is advertised, and there is no INTERNET permission in Phase 1. No Surface or decoder is allocated before the media integration stages.
 
+## Receiver prototype added after Phase 1
+
+The `receiver/` submodule pins Android AirPlay Server and its UxPlay, FFmpeg, libplist, and OpenSSL build dependencies. `scripts/build-receiver.sh` applies the small FireMirror patch before compiling. This APK uses the existing JNI protocol bridge, Android NSD advertisement, MediaCodec video path, and upstream audio path. It replaces the earlier interface APK under the same application ID. Port 7100 is the tested default because port 7000 is occupied by Fire OS on the target device.
+
+The baseline receiver advertised both AirPlay and RAOP services and displayed the Mac desktop on the TV. The branded build has been verified to start and advertise. Codec selection, audio, latency, and long running behavior still need measurement. The upstream receiver UI currently owns playback and settings; the original Phase 1 activity is retained as source history, not part of the receiver APK.
+
 ## Proposed integration
 
 ```text

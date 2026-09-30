@@ -2,6 +2,8 @@
 
 These steps apply to Android based Fire OS, not Vega OS. This APK requires Android API 24 or newer. [Amazon's ADB guide](https://developer.amazon.com/docs/fire-tv/connecting-adb-to-device.html) is the reference for device connection, and [Amazon's installation guide](https://developer.amazon.com/docs/fire-tv/installing-and-running-your-app.html) covers package management.
 
+For Mac screen mirroring, build and install `dist/FireMirror-receiver-debug.apk` with `./scripts/build-receiver.sh`. The root `app/` module is the earlier interface prototype and cannot receive a stream.
+
 ## Prepare the Fire TV
 
 1. Put the Mac and Fire TV on the same LAN.
@@ -39,7 +41,19 @@ adb -s FIRE_TV_IP:5555 shell getprop ro.product.cpu.abilist
 
 The API level must be 24 or higher. Phase 1 has no native library and is ABI independent. Later receiver builds must include both `armeabi-v7a` and `arm64-v8a`, because a 64 bit processor does not guarantee a 64 bit Fire OS userspace.
 
-## Install
+## Install the receiver
+
+From the project directory:
+
+```sh
+./scripts/build-receiver.sh
+adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
+adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/io.github.jqssun.airplay.MainActivity
+```
+
+The receiver uses port 7100 because port 7000 is occupied on the tested Fire TV. With the app open, select FireMirror in the Mac's Control Center → Screen Mirroring menu. The Mac and Fire TV must be on a LAN that permits mDNS discovery and direct device connections.
+
+## Install the earlier interface prototype
 
 From the project directory:
 
@@ -53,14 +67,20 @@ The separately delivered `FireMirror-phase1-debug.apk` is the same build and can
 ## Update while preserving settings
 
 ```sh
-adb -s FIRE_TV_IP:5555 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
 ```
 
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` usually indicates a signing key mismatch. Rebuild with the original key to retain settings. Uninstalling removes saved preferences.
 
 ## Logs
 
-Enable Diagnostic logging in FireMirror Settings to see its lifecycle and network messages:
+For the receiver's service and discovery messages:
+
+```sh
+adb -s FIRE_TV_IP:5555 logcat -v time 'AirPlayService:I' 'NsdServiceManager:I' '*:S'
+```
+
+The earlier interface prototype has a separate Diagnostic logging setting:
 
 ```sh
 adb -s FIRE_TV_IP:5555 logcat -v time 'FireMirror:D' 'AndroidRuntime:E' '*:S'
@@ -73,7 +93,7 @@ adb -s FIRE_TV_IP:5555 shell dumpsys package dev.firemirror.tv
 adb -s FIRE_TV_IP:5555 shell dumpsys connectivity
 ```
 
-Diagnostics inside the app show model, API level, build, ABI, LAN address, and available H.264/HEVC decoders. Decoder presence does not prove working playback.
+The prototype Diagnostics page shows model, API level, build, ABI, LAN address, and available H.264/HEVC decoders. Decoder presence does not prove working playback.
 
 ## Uninstall and disconnect
 

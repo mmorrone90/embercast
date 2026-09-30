@@ -4,14 +4,14 @@ Build and lint after each implemented phase. A successful build proves compilati
 
 | Phase | Current state | Acceptance gate |
 | :--- | :--- | :--- |
-| 1. TV application | Implemented | Install, launch, navigate, rename, and inspect diagnostics on Fire TV |
-| 2. Bonjour | Pending | Discover the actual service from a second LAN computer, verify TXT and port, and test unregister |
-| 3. Receiver integration | Pending | Build pinned Android receiver bridge, verify licenses, and see receiver in macOS Screen Mirroring |
-| 4. Video transport | Pending | Connect from this Mac and record actual negotiated codec and received frames |
-| 5. Display video | Pending | Decode H.264 to SurfaceView on the Fire TV with aspect ratio, no simulated frames |
-| 6. Audio | Pending | Hear unprotected desktop audio and measure synchronization |
+| 1. TV application | Interface prototype smoke tested on Fire TV; full checklist incomplete | Install, launch, navigate, rename, and inspect diagnostics on Fire TV |
+| 2. Bonjour | Fire TV advertisement and Mac discovery verified; unregister untested | Discover the actual service from a second LAN computer, verify TXT and port, and test unregister |
+| 3. Receiver integration | Pinned upstream receiver built; baseline mirrored; branded connection pending | Build pinned Android receiver bridge, verify licenses, and see receiver in macOS Screen Mirroring |
+| 4. Video transport | Baseline Mac desktop video reached Fire TV; codec not recorded | Connect from this Mac and record actual negotiated codec and received frames |
+| 5. Display video | Baseline displayed Mac desktop; hardware decoder mode unverified | Decode H.264 to SurfaceView on the Fire TV with aspect ratio, no simulated frames |
+| 6. Audio | Not verified | Hear unprotected desktop audio and measure synchronization |
 | 7. Performance | Pending | Measure real frame rate, latency, disconnect recovery, memory, and sustained playback |
-| 8. Settings and status | Name and diagnostics groundwork only | Verify all settings against real playback and protocol callbacks |
+| 8. Settings and status | Upstream receiver settings included; FireMirror integration needs testing | Verify all settings against real playback and protocol callbacks |
 
 ## Phase 1 test on the Fire TV
 
@@ -26,11 +26,11 @@ Build and lint after each implemented phase. A successful build proves compilati
 9. Disconnect and reconnect WiFi. Verify the address clears and returns. Ethernet should also work. No internet route should be required.
 10. Confirm FireMirror does not appear in Screen Mirroring yet. This is the expected result for Phase 1.
 
-Do not mark Fire TV acceptance complete from an emulator test. Once Phase 1 passes on the actual device, begin Phase 2.
+Do not mark the full Phase 1 checklist complete from an emulator test or from the narrower Fire TV smoke test. The receiver prototype has since been added and tested separately; see VALIDATION.md.
 
 ## Phase 2 and subsequent tests
 
-On the Mac, use these only after the corresponding services are actually implemented:
+On the Mac, these commands can inspect the receiver's current Bonjour services:
 
 ```sh
 dns-sd -B _airplay._tcp local.

@@ -1,0 +1,50 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 2604452..45045fc 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -31,11 +31,11 @@ android {
+     }
+ 
+     defaultConfig {
+-        applicationId = "io.github.jqssun.airplay"
++        applicationId = "dev.firemirror.tv"
+         minSdk = 24
+         targetSdk = 36
+-        versionCode = 31
+-        versionName = "0.0.31"
++        versionCode = 2
++        versionName = "0.2.0"
+ 
+         externalNativeBuild {
+             cmake {
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt b/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
+index f4a643e..1ea0876 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
+@@ -7,11 +7,11 @@ object Prefs {
+     const val NAME = "settings"
+     const val AUTO = "auto"; const val ON = "on"; const val OFF = "off"
+ 
+-    const val SERVER_NAME = "server_name"; const val DEF_SERVER_NAME = "Android AirPlay"
++    const val SERVER_NAME = "server_name"; const val DEF_SERVER_NAME = "FireMirror"
+     const val FALLBACK_MAC_ADDRESS = "fallback_mac_address"
+-    const val SERVER_PORT = "server_port"; const val DEF_SERVER_PORT = 7000
++    const val SERVER_PORT = "server_port"; const val DEF_SERVER_PORT = 7100
+     const val AUTO_START = "auto_start"; const val DEF_AUTO_START = true
+-    const val BOOT_AUTO_START = "boot_auto_start"; const val DEF_BOOT_AUTO_START = true
++    const val BOOT_AUTO_START = "boot_auto_start"; const val DEF_BOOT_AUTO_START = false
+     const val RUN_IN_BACKGROUND = "run_in_background"; const val DEF_RUN_IN_BACKGROUND = true
+     const val H265_ENABLED = "h265_enabled"; const val DEF_H265_ENABLED = true
+     const val ENFORCE_SDR = "enforce_sdr"; const val DEF_ENFORCE_SDR = true
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 9a17a5d..01cc4d9 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">AirPlay Server</string>
++    <string name="app_name">FireMirror</string>
+ 
+     <!-- Notification -->
+     <string name="notification_channel">AirPlay Service</string>
