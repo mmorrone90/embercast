@@ -48,7 +48,7 @@ From the project directory:
 ```sh
 ./scripts/build-receiver.sh
 adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
-adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/io.github.jqssun.airplay.MainActivity
+adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.receiver/io.github.jqssun.airplay.MainActivity
 ```
 
 The receiver uses port 7100 because port 7000 is occupied on the tested Fire TV. With the app open, select FireMirror in the Mac's Control Center → Screen Mirroring menu. The Mac and Fire TV must be on a LAN that permits mDNS discovery and direct device connections.
@@ -72,6 +72,8 @@ adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
 
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` usually indicates a signing key mismatch. Rebuild with the original key to retain settings. Uninstalling removes saved preferences.
 
+Version 0.3.4 uses the new package ID `dev.firemirror.receiver`. It installs alongside versions that used `dev.firemirror.tv`, so an APK update alone does not move their settings or captures. Back up those files before removing the older package. On the tested Fire TV, the app's internal `files` and `shared_prefs` were copied with `adb shell run-as` and `tar`; its screenshot and recording were copied from `/sdcard/Android/data/dev.firemirror.tv/files/` into the corresponding directory for `dev.firemirror.receiver`. The old app was removed only after the new app displayed both captures and registered its AirPlay service.
+
 ## Logs
 
 For the receiver's service and discovery messages:
@@ -89,7 +91,7 @@ adb -s FIRE_TV_IP:5555 logcat -v time 'FireMirror:D' 'AndroidRuntime:E' '*:S'
 For a broader device report:
 
 ```sh
-adb -s FIRE_TV_IP:5555 shell dumpsys package dev.firemirror.tv
+adb -s FIRE_TV_IP:5555 shell dumpsys package dev.firemirror.receiver
 adb -s FIRE_TV_IP:5555 shell dumpsys connectivity
 ```
 
@@ -98,7 +100,7 @@ The prototype Diagnostics page shows model, API level, build, ABI, LAN address, 
 ## Uninstall and disconnect
 
 ```sh
-adb -s FIRE_TV_IP:5555 uninstall dev.firemirror.tv
+adb -s FIRE_TV_IP:5555 uninstall dev.firemirror.receiver
 adb disconnect FIRE_TV_IP:5555
 ```
 

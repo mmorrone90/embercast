@@ -4,7 +4,7 @@ FireMirror is a local Mac to Fire TV screen mirroring prototype. Its receiver us
 
 Version 0.3 adds a redesigned TV home screen, fit, crop, stretch and zoom controls for live mirroring, an optional TV approval prompt for new network addresses, audio only discovery mode, screenshots, silent MP4 recordings, and a Captures screen for sharing or deleting saved files. Recording uses Android's screen capture permission prompt. Approval remembers an address only until the receiver stops; it does not verify a device's cryptographic identity. A Mac to Fire TV session verified live video, zoom, screenshot saving, and a playable silent recording. Audio output and iPhone or iPad sending still need device tests.
 
-Version 0.3.3 gives Fire TV a rectangular 16:9 launcher icon at 1280 × 720 pixels and a matching 320 × 180 TV banner. The APK also retains a square icon for round icon contexts. Both the app and its launch activity explicitly reference the rectangular artwork. The tested Fire TV's Apps & Channels page still shows an older launcher tile after the update, although Android package inspection confirms the new assets are installed.
+Version 0.3.4 fixes the icon shown for sideloaded installations on the tested Fire TV Stick. Its xhdpi square icon is scaled correctly inside Fire TV's rectangular Apps & Channels tile, and its separate 320 × 180 TV banner remains available. Amazon uses a separately supplied 1280 × 720 image for an Appstore listing. Fire TV kept an earlier package's tile artwork through reinstalls, so this version uses the new app ID `dev.firemirror.receiver`. The old app's settings, AirPlay identity, screenshot, and recording were migrated on the test device before that package was removed.
 
 AirPlay is the receiver protocol for Macs, iPhones, and iPads. The Mac baseline has been tested; iPhone and iPad behavior still needs device testing. On Fire TV models that support it, Windows and Android users can use Fire TV's separate built in Miracast screen instead. Google Cast is not implemented in FireMirror. Google's official [Cast receiver documentation](https://developers.google.com/cast/docs/android_tv_receiver/core_features) describes an Android TV receiver tied to Cast device and application registration, not a general Fire TV screen mirroring library. Amazon documents [Fire TV Miracast setup](https://digprjsurvey.amazon.com/csad/help/node/ToUjwyfVuffzVfbR6b) separately.
 
@@ -20,7 +20,7 @@ cd firemirror
 ./scripts/build-receiver.sh
 ```
 
-The script pins the upstream receiver, applies `patches/receiver-firemirror.patch`, builds the APK, and writes `dist/FireMirror-receiver-debug.apk`. The patch sets the app ID to `dev.firemirror.tv`, the visible receiver name to `FireMirror`, and the default listener port to 7100. Fire OS already uses port 7000 on the tested device. Automatic server start when the app opens remains enabled; automatic start at device boot is disabled. A nested UxPlay patch provides the optional connection approval gate.
+The script pins the upstream receiver, applies `patches/receiver-firemirror.patch`, builds the APK, and writes `dist/FireMirror-receiver-debug.apk`. The patch sets the app ID to `dev.firemirror.receiver`, the visible receiver name to `FireMirror`, and the default listener port to 7100. Fire OS already uses port 7000 on the tested device. Automatic server start when the app opens remains enabled; automatic start at device boot is disabled. A nested UxPlay patch provides the optional connection approval gate.
 
 The APK is signed by the local Android debug keystore. Keep that key for updates that preserve app data. A build on another computer normally has a different debug key and will not install as an update over this build.
 
@@ -31,7 +31,7 @@ Enable ADB Debugging on the Fire TV and connect from a Mac on the same LAN. Repl
 ```sh
 adb connect FIRE_TV_IP:5555
 adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
-adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/io.github.jqssun.airplay.MainActivity
+adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.receiver/io.github.jqssun.airplay.MainActivity
 ```
 
 Accept the debugging prompt on the TV. Leave FireMirror open. On the Mac, open Control Center → Screen Mirroring → FireMirror. The TV and Mac must be able to reach each other on the local network. No account, cloud server, or internet route is required for the mirroring protocol.

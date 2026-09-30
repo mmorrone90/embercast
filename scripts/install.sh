@@ -28,4 +28,7 @@ if [ "$api" -lt 24 ]; then
     exit 1
 fi
 adb -s "$device" install -r "$apk"
-adb -s "$device" shell am start -n dev.firemirror.tv/io.github.jqssun.airplay.MainActivity
+adb -s "$device" shell am start -n dev.firemirror.receiver/io.github.jqssun.airplay.MainActivity
+if adb -s "$device" shell pm path dev.firemirror.tv | grep -q '^package:'; then
+    echo 'An older FireMirror package is also installed. Back up its captures and settings before removing it; see docs/INSTALL.md.' >&2
+fi
