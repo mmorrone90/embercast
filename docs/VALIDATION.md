@@ -1,6 +1,6 @@
 # Delivery validation
 
-Validated on 28 September 2026. This document records Phase 1 only.
+Build and emulator validation completed on 28 September 2026. Physical Fire TV smoke testing completed on 30 September 2026. This document records Phase 1 only.
 
 ## Build and package
 
@@ -42,8 +42,12 @@ Seventeen checks passed across the interface and network tests:
 
 The main screen screenshot was visually inspected. Focus visibility and layout were checked through emulator directional input and UI hierarchy snapshots. Emulator addresses are test addresses, not a Fire TV address.
 
-## Pending device acceptance
+## Physical Fire TV smoke test
 
-No Fire TV appeared in the development Mac's ADB device list. APK installation, the physical remote, TV overscan, older Fire OS API behavior, vendor decoder behavior, and the isolated LAN without an internet route remain physical device checks. The local Mac version was inspected, but no Mac to receiver mirroring connection was attempted because Phase 1 has no receiver.
+The APK installed successfully over ADB on an Amazon Fire TV Stick (3rd Gen), model `AFTSSS`, running Fire OS 7 and Android 9 (API 28). The device reported a 32 bit `armeabi-v7a` userspace. The main activity launched successfully at 1920 × 1080, displayed the TV's actual LAN address, and showed the expected unavailable receiver and stream states. The main screen was visually inspected from a device screenshot.
+
+Remote directional and Select input opened Settings and Diagnostics, and Back returned to the main screen. Both screens were visually inspected. Diagnostics reported the expected model, API, build, ABI, LAN address, and available AVC decoder. The installed package was confirmed through Android package management, the main activity was confirmed resumed, and sampled logcat output contained no app crash.
+
+This is a smoke test, not completion of the full Phase 1 device acceptance gate. Receiver name editing and persistence, input validation, diagnostic logging, network disconnect and reconnect behavior, and launcher discovery were not retested on the physical Fire TV. The local Mac version was inspected, but no Mac to receiver mirroring connection was attempted because Phase 1 has no receiver.
 
 mDNS advertisement, AirPlay pairing, media transport, hardware video playback, audio synchronization, real FPS, and latency are not implemented or verified by this delivery. Follow PHASES.md before proceeding.
