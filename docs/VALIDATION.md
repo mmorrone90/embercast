@@ -75,3 +75,9 @@ The Captures screen displayed an injected test PNG, its file size, and Share and
 The live session revealed that a Fire TV remote Select press did not restore controls after their eight second timeout. The fullscreen view now focuses its controls while visible, focuses the video container when they hide, and responds to Select by showing the controls again. This correction was rebuilt and installed for a repeat device check.
 
 Mac audio output, connection approval during full AirPlay pairing, iPhone and iPad traffic, and long running stability have not been verified. Google Cast is not implemented, and Miracast is a separate Fire TV system feature.
+
+## FireMirror 0.3.2 artwork
+
+The receiver APK built with a new PNG launcher icon and 320 × 180 TV banner. `aapt dump badging` reported both PNG resources as the installed app artwork, and Android package management reported version `0.3.2` on the Fire TV Stick. The redesigned Overview screen and its icons were visually inspected after the update; the receiver started on port 7100.
+
+The Fire TV Apps & Channels tile still showed the older monitor artwork after an update and a clean reinstall. The existing screenshot, recording, and settings were backed up and restored around that reinstall. The stale tile is an observed launcher issue; fresh device launcher rendering of the new PNG banner has not been confirmed.
