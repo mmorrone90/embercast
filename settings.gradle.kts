@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "FireMirror"
 include(":app")
+include(":phone")

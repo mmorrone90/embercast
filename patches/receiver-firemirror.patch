@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 2604452..d43dc5e 100644
+index 2604452..4e60b94 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -31,11 +31,11 @@ android {
@@ -12,8 +12,8 @@ index 2604452..d43dc5e 100644
          targetSdk = 36
 -        versionCode = 31
 -        versionName = "0.0.31"
-+        versionCode = 8
-+        versionName = "0.4.0"
++        versionCode = 9
++        versionName = "0.5.0"
  
          externalNativeBuild {
              cmake {
@@ -541,8 +541,62 @@ index 0000000..7bcc06c
 +        return File(root, "FireMirror_$time.$extension")
 +    }
 +}
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt b/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt
+index 471193f..766312e 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt
+@@ -12,6 +12,7 @@ class NsdServiceManager(private val ctx: Context) {
+     private var multicastLock: WifiManager.MulticastLock? = null
+     private var raopRegistration: NsdManager.RegistrationListener? = null
+     private var airplayRegistration: NsdManager.RegistrationListener? = null
++    private var phoneRegistration: NsdManager.RegistrationListener? = null
+ 
+     fun acquireMulticastLock() {
+         val wifi = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+@@ -71,6 +72,30 @@ class NsdServiceManager(private val ctx: Context) {
+         nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, airplayRegistration)
+     }
+ 
++    fun registerPhoneMirror(serviceName: String, port: Int) {
++        val info = NsdServiceInfo().apply {
++            this.serviceName = serviceName
++            serviceType = "_firemirror._tcp"
++            this.port = port
++            setAttribute("version", "1")
++        }
++        phoneRegistration = object : NsdManager.RegistrationListener {
++            override fun onServiceRegistered(info: NsdServiceInfo) {
++                Log.i(TAG, "Phone receiver registered: ${info.serviceName}")
++            }
++            override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
++                Log.e(TAG, "Phone receiver registration failed: $code")
++            }
++            override fun onServiceUnregistered(info: NsdServiceInfo) {
++                Log.i(TAG, "Phone receiver unregistered")
++            }
++            override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {
++                Log.e(TAG, "Phone receiver unregister failed: $code")
++            }
++        }
++        nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, phoneRegistration)
++    }
++
+     fun unregisterAll() {
+         raopRegistration?.let {
+             try { nsdManager.unregisterService(it) } catch (_: Exception) {}
+@@ -80,6 +105,10 @@ class NsdServiceManager(private val ctx: Context) {
+             try { nsdManager.unregisterService(it) } catch (_: Exception) {}
+             airplayRegistration = null
+         }
++        phoneRegistration?.let {
++            try { nsdManager.unregisterService(it) } catch (_: Exception) {}
++            phoneRegistration = null
++        }
+     }
+ 
+     fun release() {
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
-index 9390300..a4c9a44 100644
+index 9390300..2632aad 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
 @@ -13,6 +13,9 @@ import android.content.pm.ServiceInfo
@@ -566,7 +620,16 @@ index 9390300..a4c9a44 100644
  import kotlin.math.abs
  import kotlin.math.roundToInt
  import kotlinx.coroutines.flow.MutableStateFlow
-@@ -94,6 +100,64 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -71,6 +77,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+ 
+     private var nativeHandle = 0L
+     private var nsdManager: NsdServiceManager? = null
++    private var phoneMirrorServer: PhoneMirrorServer? = null
++    @Volatile private var phoneMirrorActive = false
+     private var wakeLock: PowerManager.WakeLock? = null
+     private var foregroundStarted = false
+     private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
+@@ -94,6 +102,64 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      private val _connectionCount = MutableStateFlow(0)
      val connectionCount = _connectionCount.asStateFlow()
  
@@ -631,7 +694,7 @@ index 9390300..a4c9a44 100644
      private val _videoAspect = MutableStateFlow(16f / 9f)
      val videoAspect = _videoAspect.asStateFlow()
  
-@@ -207,6 +271,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -207,6 +273,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
  
      override fun onCreate() {
          super.onCreate()
@@ -643,7 +706,7 @@ index 9390300..a4c9a44 100644
          createNotificationChannel()
          dacpController = DacpController(this)
          dacpPlayer = DacpPlayer(
-@@ -343,8 +412,18 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -343,8 +414,18 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          startServer(name, ensureServiceStarted = true)
      }
  
@@ -662,7 +725,7 @@ index 9390300..a4c9a44 100644
          val effectiveName = name.ifBlank { Prefs.DEF_SERVER_NAME }
  
          val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-@@ -428,9 +507,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -428,9 +509,53 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          if (prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO)) {
              nsdManager?.registerRaop(raopName, port, raopTxt)
          }
@@ -670,13 +733,54 @@ index 9390300..a4c9a44 100644
 +        if (!prefs.getBoolean(Prefs.AUDIO_ONLY_MODE, Prefs.DEF_AUDIO_ONLY_MODE)) {
 +            nsdManager?.registerAirplay(resolvedName, port, airplayTxt)
 +        }
++        try {
++            phoneMirrorServer = PhoneMirrorServer(object : PhoneMirrorServer.Listener {
++                override fun approve(address: String): Boolean =
++                    !phoneMirrorActive && awaitConnectionApproval(address, required = true, allowOwnAddress = false)
++
++                override fun started(width: Int, height: Int): Boolean {
++                    if (_connectionCount.value != 0 || _mirroringActive.value ||
++                        _videoPlaybackActive.value || phoneMirrorActive) return false
++                    phoneMirrorActive = true
++                    videoRenderer.startSession()
++                    videoRenderer.setResolution(width, height)
++                    _videoAspect.value = width.toFloat() / height
++                    _videoResolution.value = "${width}x${height}"
++                    _mirroringActive.value = true
++                    _audioOnly.value = false
++                    _connectionCount.value = 1
++                    _connectionEvent.value = "Android phone connected"
++                    launchMainActivity()
++                    return true
++                }
++
++                override fun frame(bytes: ByteArray, timestampNs: Long) {
++                    if (phoneMirrorActive) videoRenderer.feedFrame(bytes, timestampNs, false)
++                }
++
++                override fun ended() {
++                    if (!phoneMirrorActive) return
++                    phoneMirrorActive = false
++                    videoRenderer.stopSession()
++                    _mirroringActive.value = false
++                    _connectionCount.value = 0
++                    _connectionEvent.value = "Android phone disconnected"
++                }
++            }).also { server ->
++                nsdManager?.registerPhoneMirror(resolvedName, server.start())
++            }
++        } catch (e: Exception) {
++            phoneMirrorServer?.stop()
++            phoneMirrorServer = null
++            log("Android phone receiver unavailable: ${e.message}")
++        }
  
          _serverState.value = ServerState.RUNNING
 +        _connectionEvent.value = "Receiver ready on port $port"
          if (ensureServiceStarted) {
              ContextCompat.startForegroundService(this, Intent(this, AirPlayService::class.java))
          }
-@@ -482,13 +564,17 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -482,13 +607,20 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          wakeLock?.release()
          wakeLock = null
          _serverState.value = ServerState.ERROR
@@ -690,12 +794,15 @@ index 9390300..a4c9a44 100644
 -    fun stopServer() {
 +    fun stopServer(forRestart: Boolean = false) {
 +        if (!forRestart) desiredRunning = false
++        phoneMirrorActive = false
++        phoneMirrorServer?.stop()
++        phoneMirrorServer = null
 +        denyPendingApproval()
 +        synchronized(approvalLock) { approvedAddresses.clear() }
          audioRenderer.detachEngine()
          if (nativeHandle != 0L) {
              NativeBridge.nativeStop(nativeHandle)
-@@ -515,10 +601,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -515,10 +647,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          _durationMs.value = 0
          _serverState.value = ServerState.STOPPED
          _connectionCount.value = 0
@@ -708,7 +815,7 @@ index 9390300..a4c9a44 100644
          log("Server stopped")
      }
  
-@@ -579,6 +666,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -579,6 +712,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      }
  
      override fun onDestroy() {
@@ -717,7 +824,7 @@ index 9390300..a4c9a44 100644
          stopServer()
          dacpPlayer.release()
          mediaReceiver?.let {
-@@ -635,6 +724,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -635,6 +770,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          clearPin()
          audioRenderer.start()
          audioRenderer.setFormat(ct, spf)
@@ -725,7 +832,7 @@ index 9390300..a4c9a44 100644
          if (!usingScreen) _setPlaying(true)
          if (!usingScreen && !_audioOnly.value) {
              // pure music streaming (not screen mirroring audio)
-@@ -713,6 +803,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -713,6 +849,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      override fun onConnectionInit() {
          val firstConnection = _connectionCount.value == 0
          _connectionCount.value++
@@ -733,13 +840,18 @@ index 9390300..a4c9a44 100644
          log("Client connected (${_connectionCount.value})")
          if (!firstConnection) return
          // conn_init is only a tcp pre-auth signal. pin-required sessions must wait for
-@@ -722,6 +813,73 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -722,6 +859,78 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          launchMainActivity()
      }
  
 +    override fun onConnectionRequest(remoteAddress: String): Boolean {
-+        if (isOwnAddress(remoteAddress)) return true
-+        if (!prefs.getBoolean(Prefs.APPROVAL_REQUIRED, Prefs.DEF_APPROVAL_REQUIRED)) return true
++        if (phoneMirrorActive) return false
++        return awaitConnectionApproval(remoteAddress, prefs.getBoolean(Prefs.APPROVAL_REQUIRED, Prefs.DEF_APPROVAL_REQUIRED))
++    }
++
++    private fun awaitConnectionApproval(remoteAddress: String, required: Boolean, allowOwnAddress: Boolean = true): Boolean {
++        if (allowOwnAddress && isOwnAddress(remoteAddress)) return true
++        if (!required) return true
 +        val request = synchronized(approvalLock) {
 +            if (remoteAddress in approvedAddresses || remoteAddress in _trustedAddresses.value) return true
 +            val existing = approvalRequest
@@ -807,7 +919,7 @@ index 9390300..a4c9a44 100644
      override fun onConnectionDestroy() {
          _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
          if (_connectionCount.value == 0) {
-@@ -729,6 +887,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -729,6 +938,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
              _endVideoPlayback("AirPlay Video stopped (disconnect)")
              // last client gone: release audio output devices to save power
              audioRenderer.stop()
@@ -815,7 +927,7 @@ index 9390300..a4c9a44 100644
              _audioOnly.value = false
              _lastVideoPollAt = 0
              _videoPollSuppressed = false
-@@ -750,10 +909,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -750,10 +960,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
              _updateMediaNotification()
          }
          log("Client disconnected (${_connectionCount.value})")
@@ -828,7 +940,7 @@ index 9390300..a4c9a44 100644
      }
  
      override fun onDisplayPin(pin: String) {
-@@ -798,6 +959,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -798,6 +1010,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      }
  
      override fun onAudioTeardown() {
@@ -836,6 +948,116 @@ index 9390300..a4c9a44 100644
          _setPlaying(false)
      }
  
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt
+new file mode 100644
+index 0000000..1956a19
+--- /dev/null
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt
+@@ -0,0 +1,104 @@
++package io.github.jqssun.airplay.service
++
++import android.util.Log
++import java.io.DataInputStream
++import java.io.DataOutputStream
++import java.net.ServerSocket
++import java.net.Socket
++import java.net.SocketException
++import java.util.concurrent.atomic.AtomicBoolean
++
++/** A small LAN transport for the companion Android sender. Video payloads are Annex B H.264. */
++class PhoneMirrorServer(private val listener: Listener) {
++    interface Listener {
++        fun approve(address: String): Boolean
++        fun started(width: Int, height: Int): Boolean
++        fun frame(bytes: ByteArray, timestampNs: Long)
++        fun ended()
++    }
++
++    private val active = AtomicBoolean(false)
++    @Volatile private var server: ServerSocket? = null
++    @Volatile private var client: Socket? = null
++    @Volatile private var running = false
++
++    fun start(): Int {
++        if (running) return server?.localPort ?: PORT
++        val socket = ServerSocket(PORT)
++        socket.reuseAddress = true
++        server = socket
++        running = true
++        Thread({ acceptLoop(socket) }, "PhoneMirrorAccept").apply { isDaemon = true }.start()
++        return socket.localPort
++    }
++
++    fun stop() {
++        running = false
++        runCatching { server?.close() }
++        runCatching { client?.close() }
++        server = null
++        client = null
++    }
++
++    private fun acceptLoop(socket: ServerSocket) {
++        while (running) {
++            val incoming = try { socket.accept() } catch (_: SocketException) { break }
++            catch (e: Exception) { Log.w(TAG, "Accept failed", e); break }
++            incoming.soTimeout = 15_000
++            if (!active.compareAndSet(false, true)) {
++                runCatching { incoming.getOutputStream().write(0) }
++                runCatching { incoming.close() }
++                continue
++            }
++            client = incoming
++            Thread({ handle(incoming) }, "PhoneMirrorClient").apply { isDaemon = true }.start()
++        }
++    }
++
++    private fun handle(socket: Socket) {
++        var started = false
++        try {
++            socket.use {
++                val input = DataInputStream(it.getInputStream())
++                val output = DataOutputStream(it.getOutputStream())
++                if (input.readInt() != MAGIC) return
++                val width = input.readInt()
++                val height = input.readInt()
++                if (width !in 64..1920 || height !in 64..1920 || width.toLong() * height > 2_073_600L) return
++                if (!listener.approve(it.inetAddress.hostAddress.orEmpty())) {
++                    output.writeByte(0)
++                    return
++                }
++                if (!listener.started(width, height)) {
++                    output.writeByte(0)
++                    return
++                }
++                started = true
++                output.writeByte(1)
++                output.flush()
++                it.soTimeout = 10_000
++                while (running) {
++                    val length = input.readInt()
++                    if (length !in 1..MAX_FRAME_BYTES) break
++                    val timestampNs = input.readLong()
++                    val data = ByteArray(length)
++                    input.readFully(data)
++                    listener.frame(data, timestampNs)
++                }
++            }
++        } catch (e: Exception) {
++            if (running) Log.i(TAG, "Phone stream ended: ${e.message}")
++        } finally {
++            if (started) listener.ended()
++            client = null
++            active.set(false)
++        }
++    }
++
++    companion object {
++        private const val TAG = "PhoneMirrorServer"
++        const val PORT = 7102
++        const val MAGIC = 0x464D5031 // FMP1
++        private const val MAX_FRAME_BYTES = 2 * 1024 * 1024
++    }
++}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt
 new file mode 100644
 index 0000000..c9eb9f6
@@ -1080,7 +1302,7 @@ index 0000000..c9eb9f6
 +}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
 new file mode 100644
-index 0000000..8e59b10
+index 0000000..aeb6fe9
 --- /dev/null
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
 @@ -0,0 +1,95 @@
@@ -1123,11 +1345,11 @@ index 0000000..8e59b10
 +    var audioTestMessage by remember { mutableStateOf<String?>(null) }
 +
 +    val guidance = when {
-+        address == null -> "Connect the Fire TV and Mac to the same local network."
++        address == null -> "Connect the Fire TV and your phone or Mac to the same local network."
 +        server == ServerState.ERROR -> "The receiver could not start. Check the server port in Settings."
 +        server != ServerState.RUNNING -> "Start FireMirror on the Overview screen."
-+        connections == 0 -> "On the Mac, open Control Centre, then Screen Mirroring and choose FireMirror."
-+        !mirroring -> "A sender connected, but no screen video has arrived yet. Check the Mac's mirroring menu."
++        connections == 0 -> "Mac or iPhone: choose FireMirror in Screen Mirroring. Android: open the FireMirror phone app."
++        !mirroring -> "A sender connected, but no screen video has arrived yet. Check the sender's mirroring screen."
 +        else -> "Screen video is arriving. Check the audio row if you expect TV sound."
 +    }
 +
@@ -3181,7 +3403,7 @@ index cb3af28..2736038 100644
 +        android:pathData="M24,73.5 A4.5,4.5 0,1 1,24,82.5 A4.5,4.5 0,1 1,24,73.5 Z" />
  </vector>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 9a17a5d..0af825b 100644
+index 9a17a5d..ccc27d7 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1,17 +1,19 @@
@@ -3212,8 +3434,8 @@ index 9a17a5d..0af825b 100644
      <string name="btn_stop">Stop</string>
      <string name="unknown_track">Unknown</string>
 +    <string name="home_ready">Ready to connect</string>
-+    <string name="home_mirror_hint">On your Mac, open Control Center, then Screen Mirroring.</string>
-+    <string name="home_mobile_hint">On iPhone or iPad, open Control Center, then Screen Mirroring.</string>
++    <string name="home_mirror_hint">Mac: open Control Centre, then Screen Mirroring.</string>
++    <string name="home_mobile_hint">iPhone: open Screen Mirroring. Android: open FireMirror Phone.</string>
 +    <string name="home_audio_hint">Choose FireMirror from the AirPlay audio menu on your Mac or iPhone.</string>
 +    <string name="home_stopped">Receiver is off</string>
 +    <string name="home_stopped_hint">Select Start to make this TV visible.</string>
