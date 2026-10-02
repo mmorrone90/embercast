@@ -1080,13 +1080,14 @@ index 0000000..c9eb9f6
 +}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
 new file mode 100644
-index 0000000..4300a06
+index 0000000..8e59b10
 --- /dev/null
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,95 @@
 +package io.github.jqssun.airplay.ui
 +
 +import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.focusable
 +import androidx.compose.foundation.layout.Column
 +import androidx.compose.foundation.layout.Row
 +import androidx.compose.foundation.layout.fillMaxSize
@@ -1138,6 +1139,13 @@ index 0000000..4300a06
 +        Text("Connection health", style = MaterialTheme.typography.headlineMedium)
 +        Text(guidance, style = MaterialTheme.typography.bodyLarge,
 +            color = MaterialTheme.colorScheme.onSurfaceVariant)
++        FilledTonalButton(onClick = {
++            audioTestMessage = if (viewModel.testTvAudio()) "A test tone was sent to the TV speakers."
++                else "The TV audio output could not start."
++        }, modifier = Modifier.dpadFocus()) {
++            Text("Test TV speakers")
++        }
++        audioTestMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 +        HorizontalDivider()
 +        HealthRow("Receiver", server.name.lowercase().replaceFirstChar { it.uppercase() })
 +        HealthRow("TV address", address ?: "No network address")
@@ -1152,13 +1160,6 @@ index 0000000..4300a06
 +        HorizontalDivider()
 +        HealthRow("TV audio", if (audio) "Receiving ${debug.audioCodec}" else "No audio stream received")
 +        HealthRow("Audio timing", if (delay < 0) "Automatic" else "${delay} ms")
-+        FilledTonalButton(onClick = {
-+            audioTestMessage = if (viewModel.testTvAudio()) "A test tone was sent to the TV speakers."
-+                else "The TV audio output could not start."
-+        }, modifier = Modifier.dpadFocus()) {
-+            Text("Test TV speakers")
-+        }
-+        audioTestMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 +        if (audio) {
 +            HealthRow("Audio underruns", debug.audio?.underruns?.toString() ?: "Unavailable")
 +            HealthRow("Audio buffer", debug.audio?.let { "${it.backlogMs} ms" } ?: "Unavailable")
@@ -1171,7 +1172,8 @@ index 0000000..4300a06
 +
 +@Composable
 +private fun HealthRow(label: String, value: String) {
-+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
++    Row(modifier = Modifier.fillMaxWidth().dpadFocus().focusable(),
++        horizontalArrangement = Arrangement.SpaceBetween) {
 +        Text(label, style = MaterialTheme.typography.bodyLarge)
 +        Text(value, style = MaterialTheme.typography.bodyLarge,
 +            color = MaterialTheme.colorScheme.primary)
