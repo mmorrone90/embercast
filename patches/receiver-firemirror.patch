@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 2604452..d79b0a8 100644
+index 2604452..d43dc5e 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -31,11 +31,11 @@ android {
@@ -12,11 +12,19 @@ index 2604452..d79b0a8 100644
          targetSdk = 36
 -        versionCode = 31
 -        versionName = "0.0.31"
-+        versionCode = 7
-+        versionName = "0.3.4"
++        versionCode = 8
++        versionName = "0.4.0"
  
          externalNativeBuild {
              cmake {
+@@ -122,6 +122,7 @@ tasks.withType<Zip>().configureEach {
+ }
+ 
+ dependencies {
++    testImplementation("junit:junit:4.13.2")
+     implementation(libs.androidx.core.ktx)
+     implementation(libs.androidx.activity.compose)
+     implementation(libs.androidx.lifecycle.runtime)
 diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
 index f42c86f..aac18db 100644
 --- a/app/src/main/AndroidManifest.xml
@@ -131,6 +139,12 @@ index 0000000..f496418
 + 
 +     conn = calloc(1, sizeof(raop_conn_t));
 +     if (!conn) {
+diff --git a/app/src/main/cpp/third_party/UxPlay b/app/src/main/cpp/third_party/UxPlay
+--- a/app/src/main/cpp/third_party/UxPlay
++++ b/app/src/main/cpp/third_party/UxPlay
+@@ -1 +1 @@
+-Subproject commit 462153392f2e30937424922039ff9f0cda5e7b1a
++Subproject commit 462153392f2e30937424922039ff9f0cda5e7b1a-dirty
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt b/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt
 index d72b937..e964620 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/MainActivity.kt
@@ -257,7 +271,7 @@ index d72b937..e964620 100644
              if (it.logCallback === logCallback) it.logCallback = null
              if (it.pinCallback === pinCallback) it.pinCallback = null
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt b/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
-index f4a643e..dcabfbc 100644
+index f4a643e..ced6e67 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/Prefs.kt
 @@ -7,11 +7,11 @@ object Prefs {
@@ -275,15 +289,20 @@ index f4a643e..dcabfbc 100644
      const val RUN_IN_BACKGROUND = "run_in_background"; const val DEF_RUN_IN_BACKGROUND = true
      const val H265_ENABLED = "h265_enabled"; const val DEF_H265_ENABLED = true
      const val ENFORCE_SDR = "enforce_sdr"; const val DEF_ENFORCE_SDR = true
-@@ -35,6 +35,7 @@ object Prefs {
+@@ -33,8 +33,12 @@ object Prefs {
+     const val AAC_ENABLED = "aac_enabled"; const val DEF_AAC_ENABLED = true
+     const val RESOLUTION = "resolution"; const val DEF_RESOLUTION = AUTO
      const val MAX_FPS = "max_fps"; const val DEF_MAX_FPS = 60
++    const val QUALITY_PRESET = "quality_preset"
      const val OVERSCANNED = "overscanned"; const val DEF_OVERSCANNED = false
      const val REQUIRE_PIN = "require_pin"; const val DEF_REQUIRE_PIN = false
 +    const val APPROVAL_REQUIRED = "approval_required"; const val DEF_APPROVAL_REQUIRED = false
++    const val TRUSTED_ADDRESSES = "trusted_addresses"
++    const val TRUSTED_LABEL_PREFIX = "trusted_address_label_"
      const val ALLOW_NEW_CONN = "allow_new_conn"; const val DEF_ALLOW_NEW_CONN = true
      const val AUDIO_LATENCY_MS = "audio_latency_ms"; const val DEF_AUDIO_LATENCY_MS = -1
      const val DEBUG_ENABLED = "debug_enabled"; const val DEF_DEBUG_ENABLED = false
-@@ -45,5 +46,6 @@ object Prefs {
+@@ -45,5 +49,6 @@ object Prefs {
      const val KEEP_SCREEN_ON = "keep_screen_on"; const val DEF_KEEP_SCREEN_ON = true
      const val ADVERTISE_VIDEO = "advertise_video"; const val DEF_ADVERTISE_VIDEO = true
      const val ADVERTISE_AUDIO = "advertise_audio"; const val DEF_ADVERTISE_AUDIO = true
@@ -302,6 +321,91 @@ index 8732267..dce4d81 100644
      fun onConnectionDestroy()
      fun onConnectionReset(reason: Int)
      fun onDisplayPin(pin: String)
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServer.kt
+new file mode 100644
+index 0000000..7c2d214
+--- /dev/null
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServer.kt
+@@ -0,0 +1,79 @@
++package io.github.jqssun.airplay.capture
++
++import java.io.File
++import java.math.BigInteger
++import java.net.ServerSocket
++import java.net.Socket
++import java.net.SocketTimeoutException
++import java.net.InetAddress
++import java.security.SecureRandom
++import java.util.concurrent.atomic.AtomicBoolean
++
++/** Shares one selected capture for ten minutes on the local network. */
++class CaptureTransferServer(private val file: File, address: String) : AutoCloseable {
++    private val socket = ServerSocket(0, 5, InetAddress.getByName(address))
++    private val running = AtomicBoolean(true)
++    private val expiresAt = System.nanoTime() / 1_000_000 + TEN_MINUTES
++    private val token = ByteArray(9).also { SecureRandom().nextBytes(it) }
++        .let { BigInteger(1, it).toString(36) }
++
++    val url: String = "http://${if (address.contains(':')) "[$address]" else address}:${socket.localPort}/$token"
++
++    private val worker = Thread({ serve() }, "FireMirrorCaptureTransfer").apply {
++        isDaemon = true
++        start()
++    }
++
++    private fun serve() {
++        socket.soTimeout = 1000
++        while (running.get() && System.nanoTime() / 1_000_000 < expiresAt) {
++            try {
++                socket.accept().use { client -> handle(client) }
++            } catch (_: SocketTimeoutException) {
++                continue
++            } catch (_: Exception) {
++                if (!running.get()) break
++            }
++        }
++        close()
++    }
++
++    private fun handle(client: Socket) {
++        client.soTimeout = 5000
++        val reader = client.getInputStream().bufferedReader(Charsets.US_ASCII)
++        val request = reader.readLine()?.take(4096) ?: return
++        var count = 0
++        while (count++ < 40) {
++            val header = reader.readLine() ?: break
++            if (header.isEmpty()) break
++        }
++        val output = client.getOutputStream()
++        if (request != "GET /$token HTTP/1.1" && request != "GET /$token HTTP/1.0") {
++            output.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
++            return
++        }
++        if (!file.isFile || System.nanoTime() / 1_000_000 >= expiresAt) {
++            output.write("HTTP/1.1 410 Gone\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
++            return
++        }
++        val type = if (file.extension.lowercase() == "mp4") "video/mp4" else "image/png"
++        val safeName = file.name.replace(Regex("[^A-Za-z0-9_.]"), "_")
++        val headers = "HTTP/1.1 200 OK\r\nContent-Type: $type\r\n" +
++            "Content-Length: ${file.length()}\r\n" +
++            "Content-Disposition: attachment; filename=\"$safeName\"\r\n" +
++            "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n" +
++            "Connection: close\r\n\r\n"
++        output.write(headers.toByteArray(Charsets.US_ASCII))
++        file.inputStream().use { it.copyTo(output) }
++        output.flush()
++    }
++
++    override fun close() {
++        running.set(false)
++        runCatching { socket.close() }
++    }
++
++    companion object {
++        private const val TEN_MINUTES = 10 * 60 * 1000L
++    }
++}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/capture/MirrorCapture.kt b/app/src/main/kotlin/io/github/jqssun/airplay/capture/MirrorCapture.kt
 new file mode 100644
 index 0000000..7bcc06c
@@ -438,19 +542,31 @@ index 0000000..7bcc06c
 +    }
 +}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
-index 9390300..5ceda9d 100644
+index 9390300..a4c9a44 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
-@@ -51,6 +51,8 @@ import io.github.jqssun.airplay.renderer.VideoRenderer
+@@ -13,6 +13,9 @@ import android.content.pm.ServiceInfo
+ import android.content.res.Configuration
+ import android.graphics.BitmapFactory
+ import android.media.AudioManager
++import android.net.ConnectivityManager
++import android.net.Network
++import android.net.LinkProperties
+ import android.os.Binder
+ import android.os.Build
+ import android.os.Handler
+@@ -50,7 +53,10 @@ import io.github.jqssun.airplay.renderer.AudioRenderer
+ import io.github.jqssun.airplay.renderer.VideoRenderer
  import io.github.jqssun.airplay.viewmodel.DebugInfo
  import java.net.NetworkInterface
++import java.net.Inet4Address
  import java.security.SecureRandom
 +import java.util.concurrent.CountDownLatch
 +import java.util.concurrent.TimeUnit
  import kotlin.math.abs
  import kotlin.math.roundToInt
  import kotlinx.coroutines.flow.MutableStateFlow
-@@ -94,6 +96,16 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -94,6 +100,64 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      private val _connectionCount = MutableStateFlow(0)
      val connectionCount = _connectionCount.asStateFlow()
  
@@ -461,13 +577,92 @@ index 9390300..5ceda9d 100644
 +    private val approvalLock = Any()
 +    private var approvalRequest: ApprovalRequest? = null
 +    private val approvedAddresses = mutableSetOf<String>()
++    private val _trustedAddresses = MutableStateFlow<Set<String>>(emptySet())
++    val trustedAddresses = _trustedAddresses.asStateFlow()
 +    private val _pendingApproval = MutableStateFlow<String?>(null)
 +    val pendingApproval = _pendingApproval.asStateFlow()
++
++    private val _networkAddress = MutableStateFlow<String?>(null)
++    val networkAddress = _networkAddress.asStateFlow()
++    private val _connectionEvent = MutableStateFlow("Waiting for a connection")
++    val connectionEvent = _connectionEvent.asStateFlow()
++    private val _audioActive = MutableStateFlow(false)
++    val audioActive = _audioActive.asStateFlow()
++    private var desiredRunning = false
++    private var activeNetworkSignature: String? = null
++    private val connectivity by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
++    private val networkChanged = Runnable { inspectNetwork() }
++    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
++        override fun onAvailable(network: Network) = scheduleNetworkCheck()
++        override fun onLost(network: Network) = scheduleNetworkCheck()
++        override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) = scheduleNetworkCheck()
++    }
++
++    private fun scheduleNetworkCheck() {
++        _mainHandler.removeCallbacks(networkChanged)
++        _mainHandler.postDelayed(networkChanged, 1500L)
++    }
++
++    private fun currentNetwork(): Pair<String?, String?> {
++        val network = connectivity.activeNetwork ?: return null to null
++        val addresses = connectivity.getLinkProperties(network)?.linkAddresses.orEmpty()
++            .map { it.address }
++            .filterNot { it.isLoopbackAddress || it.isLinkLocalAddress }
++        val address = (addresses.firstOrNull { it is Inet4Address } ?: addresses.firstOrNull())?.hostAddress
++        return "${network}:$address" to address
++    }
++
++    private fun inspectNetwork() {
++        val (signature, address) = currentNetwork()
++        _networkAddress.value = address
++        if (signature == activeNetworkSignature) return
++        activeNetworkSignature = signature
++        if (signature == null) {
++            _connectionEvent.value = "Network unavailable. Waiting to reconnect."
++            return
++        }
++        if (!desiredRunning) return
++        _connectionEvent.value = "Network changed. Restarting discovery."
++        val name = prefs.getString(Prefs.SERVER_NAME, Prefs.DEF_SERVER_NAME).orEmpty()
++        if (_serverState.value == ServerState.RUNNING) restartServer(name)
++        else startServer(name, ensureServiceStarted = false)
++    }
 +
      private val _videoAspect = MutableStateFlow(16f / 9f)
      val videoAspect = _videoAspect.asStateFlow()
  
-@@ -428,7 +440,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -207,6 +271,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+ 
+     override fun onCreate() {
+         super.onCreate()
++        _trustedAddresses.value = prefs.getStringSet(Prefs.TRUSTED_ADDRESSES, emptySet())?.toSet().orEmpty()
++        val (networkSignature, address) = currentNetwork()
++        activeNetworkSignature = networkSignature
++        _networkAddress.value = address
++        connectivity.registerDefaultNetworkCallback(networkCallback)
+         createNotificationChannel()
+         dacpController = DacpController(this)
+         dacpPlayer = DacpPlayer(
+@@ -343,8 +412,18 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         startServer(name, ensureServiceStarted = true)
+     }
+ 
++    fun restartServer(name: String) {
++        if (_serverState.value != ServerState.RUNNING) return
++        stopServer(forRestart = true)
++        startServer(name, ensureServiceStarted = false)
++    }
++
+     private fun startServer(name: String, ensureServiceStarted: Boolean) {
+         if (_serverState.value == ServerState.RUNNING) return
++        desiredRunning = true
++        val (signature, address) = currentNetwork()
++        activeNetworkSignature = signature
++        _networkAddress.value = address
+         val effectiveName = name.ifBlank { Prefs.DEF_SERVER_NAME }
+ 
+         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+@@ -428,9 +507,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          if (prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO)) {
              nsdManager?.registerRaop(raopName, port, raopTxt)
          }
@@ -477,17 +672,68 @@ index 9390300..5ceda9d 100644
 +        }
  
          _serverState.value = ServerState.RUNNING
++        _connectionEvent.value = "Receiver ready on port $port"
          if (ensureServiceStarted) {
-@@ -489,6 +503,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+             ContextCompat.startForegroundService(this, Intent(this, AirPlayService::class.java))
+         }
+@@ -482,13 +564,17 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         wakeLock?.release()
+         wakeLock = null
+         _serverState.value = ServerState.ERROR
++        _connectionEvent.value = "Receiver failed to start. Check the port and network."
+         if (foregroundStarted) {
+             stopForeground(STOP_FOREGROUND_REMOVE)
+             foregroundStarted = false
+         }
      }
  
-     fun stopServer() {
+-    fun stopServer() {
++    fun stopServer(forRestart: Boolean = false) {
++        if (!forRestart) desiredRunning = false
 +        denyPendingApproval()
 +        synchronized(approvalLock) { approvedAddresses.clear() }
          audioRenderer.detachEngine()
          if (nativeHandle != 0L) {
              NativeBridge.nativeStop(nativeHandle)
-@@ -722,6 +738,59 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -515,10 +601,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         _durationMs.value = 0
+         _serverState.value = ServerState.STOPPED
+         _connectionCount.value = 0
++        _audioActive.value = false
+         _refreshDacpPlayer()
+         stopForeground(STOP_FOREGROUND_REMOVE)
+         foregroundStarted = false
+-        stopSelf()
++        if (!forRestart) stopSelf()
+         log("Server stopped")
+     }
+ 
+@@ -579,6 +666,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     }
+ 
+     override fun onDestroy() {
++        _mainHandler.removeCallbacks(networkChanged)
++        runCatching { connectivity.unregisterNetworkCallback(networkCallback) }
+         stopServer()
+         dacpPlayer.release()
+         mediaReceiver?.let {
+@@ -635,6 +724,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         clearPin()
+         audioRenderer.start()
+         audioRenderer.setFormat(ct, spf)
++        _audioActive.value = true
+         if (!usingScreen) _setPlaying(true)
+         if (!usingScreen && !_audioOnly.value) {
+             // pure music streaming (not screen mirroring audio)
+@@ -713,6 +803,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     override fun onConnectionInit() {
+         val firstConnection = _connectionCount.value == 0
+         _connectionCount.value++
++        _connectionEvent.value = "Sender connected"
+         log("Client connected (${_connectionCount.value})")
+         if (!firstConnection) return
+         // conn_init is only a tcp pre-auth signal. pin-required sessions must wait for
+@@ -722,6 +813,73 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          launchMainActivity()
      }
  
@@ -495,7 +741,7 @@ index 9390300..5ceda9d 100644
 +        if (isOwnAddress(remoteAddress)) return true
 +        if (!prefs.getBoolean(Prefs.APPROVAL_REQUIRED, Prefs.DEF_APPROVAL_REQUIRED)) return true
 +        val request = synchronized(approvalLock) {
-+            if (remoteAddress in approvedAddresses) return true
++            if (remoteAddress in approvedAddresses || remoteAddress in _trustedAddresses.value) return true
 +            val existing = approvalRequest
 +            if (existing != null && existing.address != remoteAddress) return false
 +            existing ?: ApprovalRequest(remoteAddress).also {
@@ -515,11 +761,16 @@ index 9390300..5ceda9d 100644
 +        return decided && request.allowed
 +    }
 +
-+    fun answerConnectionRequest(allow: Boolean) {
++    fun answerConnectionRequest(allow: Boolean, rememberAddress: Boolean = false) {
 +        synchronized(approvalLock) {
 +            val request = approvalRequest ?: return
 +            request.allowed = allow
 +            if (allow) approvedAddresses.add(request.address)
++            if (allow && rememberAddress) {
++                val updated = _trustedAddresses.value + request.address
++                prefs.edit().putStringSet(Prefs.TRUSTED_ADDRESSES, updated).apply()
++                _trustedAddresses.value = updated
++            }
 +            approvalRequest = null
 +            _pendingApproval.value = null
 +            request.decision.countDown()
@@ -527,6 +778,15 @@ index 9390300..5ceda9d 100644
 +    }
 +
 +    private fun denyPendingApproval() = answerConnectionRequest(false)
++
++    fun forgetTrustedAddress(address: String) {
++        synchronized(approvalLock) {
++            val updated = _trustedAddresses.value - address
++            prefs.edit().putStringSet(Prefs.TRUSTED_ADDRESSES, updated).apply()
++            _trustedAddresses.value = updated
++            approvedAddresses.remove(address)
++        }
++    }
 +
 +    private fun isOwnAddress(address: String): Boolean {
 +        if (address == "127.0.0.1" || address == "::1") return true
@@ -547,16 +807,48 @@ index 9390300..5ceda9d 100644
      override fun onConnectionDestroy() {
          _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
          if (_connectionCount.value == 0) {
+@@ -729,6 +887,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+             _endVideoPlayback("AirPlay Video stopped (disconnect)")
+             // last client gone: release audio output devices to save power
+             audioRenderer.stop()
++            _audioActive.value = false
+             _audioOnly.value = false
+             _lastVideoPollAt = 0
+             _videoPollSuppressed = false
+@@ -750,10 +909,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+             _updateMediaNotification()
+         }
+         log("Client disconnected (${_connectionCount.value})")
++        if (_connectionCount.value == 0) _connectionEvent.value = "Sender disconnected. Ready to reconnect."
+     }
+ 
+     override fun onConnectionReset(reason: Int) {
+         log("Connection reset: $reason")
++        _connectionEvent.value = "Connection reset ($reason). Waiting for sender."
+     }
+ 
+     override fun onDisplayPin(pin: String) {
+@@ -798,6 +959,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     }
+ 
+     override fun onAudioTeardown() {
++        _audioActive.value = false
+         _setPlaying(false)
+     }
+ 
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt
 new file mode 100644
-index 0000000..c7e449d
+index 0000000..c9eb9f6
 --- /dev/null
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/CapturesScreen.kt
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,236 @@
 +package io.github.jqssun.airplay.ui
 +
 +import android.content.Intent
++import android.graphics.BitmapFactory
 +import android.os.Environment
++import android.widget.VideoView
++import androidx.compose.foundation.Image
 +import androidx.compose.foundation.layout.Arrangement
 +import androidx.compose.foundation.layout.Column
 +import androidx.compose.foundation.layout.Row
@@ -578,23 +870,33 @@ index 0000000..c7e449d
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
++import androidx.compose.runtime.DisposableEffect
 +import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
 +import androidx.compose.runtime.getValue
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
 +import androidx.compose.runtime.setValue
 +import androidx.compose.ui.Alignment
 +import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.asImageBitmap
 +import androidx.compose.ui.platform.LocalContext
 +import androidx.compose.ui.res.stringResource
 +import androidx.compose.ui.unit.dp
 +import androidx.core.content.FileProvider
 +import io.github.jqssun.airplay.R
++import io.github.jqssun.airplay.capture.CaptureTransferServer
++import io.github.jqssun.airplay.viewmodel.MainViewModel
++import androidx.compose.ui.viewinterop.AndroidView
 +import java.io.File
 +
 +@Composable
-+fun CapturesScreen() {
++fun CapturesScreen(viewModel: MainViewModel) {
 +    val context = LocalContext.current
++    val address by viewModel.networkAddress.collectAsState()
++    val noNetworkMessage = stringResource(R.string.captures_no_network)
++    val captureFailedMessage = stringResource(R.string.capture_failed)
++    val shareTitle = stringResource(R.string.captures_share)
 +    fun files(): List<File> = listOf(Environment.DIRECTORY_PICTURES, Environment.DIRECTORY_MOVIES)
 +        .flatMap { folder -> context.getExternalFilesDir(folder)?.listFiles()?.toList().orEmpty() }
 +        .filter { it.isFile && it.name.startsWith("FireMirror_") && it.extension in setOf("png", "mp4") }
@@ -602,6 +904,11 @@ index 0000000..c7e449d
 +
 +    var captures by remember { mutableStateOf(files()) }
 +    var toDelete by remember { mutableStateOf<File?>(null) }
++    var toPreview by remember { mutableStateOf<File?>(null) }
++    var transfer by remember { mutableStateOf<CaptureTransferServer?>(null) }
++    var transferFile by remember { mutableStateOf<File?>(null) }
++    var transferError by remember { mutableStateOf<String?>(null) }
++    DisposableEffect(transfer) { onDispose { transfer?.close() } }
 +
 +    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 24.dp)) {
 +        Row(
@@ -634,6 +941,20 @@ index 0000000..c7e449d
 +                            Text(file.name, style = MaterialTheme.typography.titleMedium)
 +                            Text("${file.length() / 1024} KB", color = MaterialTheme.colorScheme.onSurfaceVariant)
 +                        }
++                        TextButton(onClick = { toPreview = file }, modifier = Modifier.dpadFocus()) {
++                            Text(stringResource(R.string.captures_preview))
++                        }
++                        TextButton(onClick = {
++                            if (address == null) {
++                                transferError = noNetworkMessage
++                            } else {
++                                runCatching { CaptureTransferServer(file, address!!) }
++                                    .onSuccess { transferFile = file; transfer = it }
++                                    .onFailure { transferError = it.message ?: captureFailedMessage }
++                            }
++                        }, modifier = Modifier.dpadFocus()) {
++                            Text(stringResource(R.string.captures_download))
++                        }
 +                        TextButton(onClick = {
 +                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 +                            val mime = if (file.extension == "mp4") "video/mp4" else "image/png"
@@ -642,7 +963,7 @@ index 0000000..c7e449d
 +                                putExtra(Intent.EXTRA_STREAM, uri)
 +                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 +                            }
-+                            context.startActivity(Intent.createChooser(intent, context.getString(R.string.captures_share)))
++                            context.startActivity(Intent.createChooser(intent, shareTitle))
 +                        }, modifier = Modifier.dpadFocus()) {
 +                            Text(stringResource(R.string.captures_share))
 +                        }
@@ -655,6 +976,43 @@ index 0000000..c7e449d
 +                }
 +            }
 +        }
++    }
++
++    toPreview?.let { file ->
++        CapturePreview(file = file, onClose = { toPreview = null })
++    }
++
++    transfer?.let { server ->
++        AlertDialog(
++            onDismissRequest = { transfer = null },
++            title = { Text(stringResource(R.string.captures_download_title)) },
++            text = {
++                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
++                    Text(transferFile?.name ?: "FireMirror capture")
++                    Text(stringResource(R.string.captures_download_hint))
++                    Text(server.url, color = MaterialTheme.colorScheme.primary,
++                        style = MaterialTheme.typography.titleMedium)
++                }
++            },
++            confirmButton = {
++                TextButton(onClick = { transfer = null }, modifier = Modifier.dpadFocus()) {
++                    Text(stringResource(R.string.captures_cancel))
++                }
++            }
++        )
++    }
++
++    transferError?.let { error ->
++        AlertDialog(
++            onDismissRequest = { transferError = null },
++            title = { Text(stringResource(R.string.capture_failed)) },
++            text = { Text(error) },
++            confirmButton = {
++                TextButton(onClick = { transferError = null }, modifier = Modifier.dpadFocus()) {
++                    Text(stringResource(R.string.btn_ok))
++                }
++            }
++        )
 +    }
 +
 +    toDelete?.let { file ->
@@ -677,8 +1035,150 @@ index 0000000..c7e449d
 +        )
 +    }
 +}
++
++@Composable
++private fun CapturePreview(file: File, onClose: () -> Unit) {
++    var video by remember(file) { mutableStateOf<VideoView?>(null) }
++    DisposableEffect(file) { onDispose { video?.stopPlayback() } }
++    AlertDialog(
++        onDismissRequest = onClose,
++        title = { Text(file.name) },
++        text = {
++            if (file.extension == "png") {
++                val bitmap = remember(file) { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
++                if (bitmap != null) {
++                    Image(bitmap, null, modifier = Modifier.fillMaxWidth().height(360.dp))
++                } else {
++                    Text(stringResource(R.string.capture_failed))
++                }
++            } else {
++                Column {
++                    AndroidView(
++                        factory = { ctx ->
++                            VideoView(ctx).apply {
++                                setVideoPath(file.absolutePath)
++                                setOnPreparedListener { start() }
++                                video = this
++                            }
++                        },
++                        modifier = Modifier.fillMaxWidth().height(360.dp)
++                    )
++                    TextButton(onClick = {
++                        video?.let { if (it.isPlaying) it.pause() else it.start() }
++                    }, modifier = Modifier.dpadFocus()) {
++                        Text(stringResource(R.string.captures_play_pause))
++                    }
++                }
++            }
++        },
++        confirmButton = {
++            TextButton(onClick = onClose, modifier = Modifier.dpadFocus()) {
++                Text(stringResource(R.string.captures_close))
++            }
++        }
++    )
++}
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
+new file mode 100644
+index 0000000..4300a06
+--- /dev/null
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
+@@ -0,0 +1,93 @@
++package io.github.jqssun.airplay.ui
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.FilledTonalButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import io.github.jqssun.airplay.service.AirPlayService.ServerState
++import io.github.jqssun.airplay.viewmodel.MainViewModel
++
++@Composable
++fun HealthScreen(viewModel: MainViewModel) {
++    val server by viewModel.serverState.collectAsState()
++    val address by viewModel.networkAddress.collectAsState()
++    val connections by viewModel.connectionCount.collectAsState()
++    val mirroring by viewModel.mirroringActive.collectAsState()
++    val audio by viewModel.audioActive.collectAsState()
++    val event by viewModel.connectionEvent.collectAsState()
++    val debug by viewModel.debugInfo.collectAsState()
++    val delay by viewModel.audioLatencyMs.collectAsState()
++    var audioTestMessage by remember { mutableStateOf<String?>(null) }
++
++    val guidance = when {
++        address == null -> "Connect the Fire TV and Mac to the same local network."
++        server == ServerState.ERROR -> "The receiver could not start. Check the server port in Settings."
++        server != ServerState.RUNNING -> "Start FireMirror on the Overview screen."
++        connections == 0 -> "On the Mac, open Control Centre, then Screen Mirroring and choose FireMirror."
++        !mirroring -> "A sender connected, but no screen video has arrived yet. Check the Mac's mirroring menu."
++        else -> "Screen video is arriving. Check the audio row if you expect TV sound."
++    }
++
++    Column(
++        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
++            .padding(horizontal = 36.dp, vertical = 24.dp),
++        verticalArrangement = Arrangement.spacedBy(10.dp)
++    ) {
++        Text("Connection health", style = MaterialTheme.typography.headlineMedium)
++        Text(guidance, style = MaterialTheme.typography.bodyLarge,
++            color = MaterialTheme.colorScheme.onSurfaceVariant)
++        HorizontalDivider()
++        HealthRow("Receiver", server.name.lowercase().replaceFirstChar { it.uppercase() })
++        HealthRow("TV address", address ?: "No network address")
++        HealthRow("Senders", connections.toString())
++        HealthRow("Last event", event)
++        HorizontalDivider()
++        HealthRow("Screen video", if (mirroring) "Receiving" else "Waiting")
++        HealthRow("Resolution", if (mirroring) debug.videoRes else "No active stream")
++        HealthRow("Frame rate", if (mirroring) "${debug.videoFps} fps" else "No active stream")
++        HealthRow("Video bitrate", if (mirroring) debug.bitrateStr else "No active stream")
++        HealthRow("Dropped frames", if (mirroring) debug.droppedFrames.toString() else "No active stream")
++        HorizontalDivider()
++        HealthRow("TV audio", if (audio) "Receiving ${debug.audioCodec}" else "No audio stream received")
++        HealthRow("Audio timing", if (delay < 0) "Automatic" else "${delay} ms")
++        FilledTonalButton(onClick = {
++            audioTestMessage = if (viewModel.testTvAudio()) "A test tone was sent to the TV speakers."
++                else "The TV audio output could not start."
++        }, modifier = Modifier.dpadFocus()) {
++            Text("Test TV speakers")
++        }
++        audioTestMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
++        if (audio) {
++            HealthRow("Audio underruns", debug.audio?.underruns?.toString() ?: "Unavailable")
++            HealthRow("Audio buffer", debug.audio?.let { "${it.backlogMs} ms" } ?: "Unavailable")
++        }
++        Text("Measurements update while this screen is open. Audio timing and quality controls are in Settings.",
++            style = MaterialTheme.typography.bodyMedium,
++            color = MaterialTheme.colorScheme.onSurfaceVariant)
++    }
++}
++
++@Composable
++private fun HealthRow(label: String, value: String) {
++    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
++        Text(label, style = MaterialTheme.typography.bodyLarge)
++        Text(value, style = MaterialTheme.typography.bodyLarge,
++            color = MaterialTheme.colorScheme.primary)
++    }
++}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
-index 81e662d..a80a697 100644
+index 81e662d..ace155b 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
 @@ -31,7 +31,11 @@ import androidx.compose.ui.focus.FocusRequester
@@ -693,15 +1193,16 @@ index 81e662d..a80a697 100644
  import androidx.compose.ui.graphics.Brush
  import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.graphics.asImageBitmap
-@@ -78,6 +82,7 @@ import kotlinx.coroutines.delay
+@@ -78,6 +82,8 @@ import kotlinx.coroutines.delay
  
  private enum class Tab(val labelRes: Int, val icon: ImageVector) {
      OVERVIEW(R.string.tab_overview, Icons.Default.Cast),
 +    CAPTURES(R.string.tab_captures, Icons.Default.Collections),
++    HEALTH(R.string.tab_health, Icons.Default.MonitorHeart),
      LOGS(R.string.tab_logs, Icons.AutoMirrored.Filled.Article),
      SETTINGS(R.string.tab_settings, Icons.Default.Settings)
  }
-@@ -88,26 +93,48 @@ fun MainScreen(
+@@ -88,26 +94,48 @@ fun MainScreen(
      isInPip: Boolean = false,
      onSurfaceAvailable: (android.view.Surface) -> Unit,
      onSurfaceDestroyed: (android.view.Surface) -> Unit,
@@ -756,7 +1257,7 @@ index 81e662d..a80a697 100644
      }
  
      // fullscreen only once mirroring reports a size: connections rise before the kind is known
-@@ -507,7 +534,14 @@ fun MainScreen(
+@@ -507,7 +535,14 @@ fun MainScreen(
              viewModel = viewModel,
              video = video,
              onExitFullscreen = { fullscreen = false },
@@ -772,7 +1273,7 @@ index 81e662d..a80a697 100644
          )
      } else {
          Scaffold(
-@@ -535,7 +569,14 @@ fun MainScreen(
+@@ -535,7 +570,14 @@ fun MainScreen(
              Box(modifier = Modifier.padding(padding)) {
                  TabContent(
                      tab, viewModel, video,
@@ -788,7 +1289,7 @@ index 81e662d..a80a697 100644
                  )
              }
          }
-@@ -560,6 +601,25 @@ fun MainScreen(
+@@ -560,6 +602,31 @@ fun MainScreen(
          )
      }
  
@@ -799,8 +1300,14 @@ index 81e662d..a80a697 100644
 +            title = { Text(stringResource(R.string.approval_title)) },
 +            text = { Text(stringResource(R.string.approval_message, pendingApproval!!)) },
 +            confirmButton = {
-+                Button(onClick = { viewModel.answerConnectionRequest(true) }, modifier = Modifier.dpadFocus()) {
-+                    Text(stringResource(R.string.approval_allow))
++                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                    TextButton(onClick = { viewModel.answerConnectionRequest(true) }, modifier = Modifier.dpadFocus()) {
++                        Text(stringResource(R.string.approval_allow))
++                    }
++                    Button(onClick = { viewModel.answerConnectionRequest(true, rememberAddress = true) },
++                        modifier = Modifier.dpadFocus()) {
++                        Text(stringResource(R.string.approval_always))
++                    }
 +                }
 +            },
 +            dismissButton = {
@@ -814,7 +1321,7 @@ index 81e662d..a80a697 100644
  }
  
  @Composable
-@@ -569,13 +629,28 @@ private fun TabContent(
+@@ -569,13 +636,29 @@ private fun TabContent(
      video: @Composable () -> Unit,
      onFullscreen: () -> Unit,
      onPip: () -> Unit,
@@ -841,11 +1348,12 @@ index 81e662d..a80a697 100644
 +            onRecord = onRecord,
 +            recording = recording
          )
-+        Tab.CAPTURES -> CapturesScreen()
++        Tab.CAPTURES -> CapturesScreen(viewModel)
++        Tab.HEALTH -> HealthScreen(viewModel)
          Tab.LOGS -> LogsScreen(viewModel)
          Tab.SETTINGS -> SettingsScreen(viewModel)
      }
-@@ -587,7 +662,14 @@ private fun OverviewContent(
+@@ -587,7 +670,14 @@ private fun OverviewContent(
      video: @Composable () -> Unit,
      onFullscreen: () -> Unit,
      onPip: () -> Unit,
@@ -861,7 +1369,7 @@ index 81e662d..a80a697 100644
  ) {
      val state by viewModel.serverState.collectAsState()
      val connections by viewModel.connectionCount.collectAsState()
-@@ -598,6 +680,8 @@ private fun OverviewContent(
+@@ -598,6 +688,8 @@ private fun OverviewContent(
      val videoPlaybackActive by viewModel.videoPlaybackActive.collectAsState()
      val debugEnabled by viewModel.debugEnabled.collectAsState()
      val debugInfo by viewModel.debugInfo.collectAsState()
@@ -870,7 +1378,7 @@ index 81e662d..a80a697 100644
      val tv = isTv()
      val startFocus = remember { FocusRequester() }
      LaunchedEffect(Unit) {
-@@ -626,21 +710,48 @@ private fun OverviewContent(
+@@ -626,21 +718,48 @@ private fun OverviewContent(
                  if (state != ServerState.RUNNING || connections == 0) {
                      Column(horizontalAlignment = Alignment.CenterHorizontally) {
                          Icon(
@@ -927,7 +1435,7 @@ index 81e662d..a80a697 100644
                      }
                  } else if (connecting) {
                      Text(
-@@ -691,7 +802,7 @@ private fun OverviewContent(
+@@ -691,7 +810,7 @@ private fun OverviewContent(
              }
          }
  
@@ -936,7 +1444,7 @@ index 81e662d..a80a697 100644
          Card(
              modifier = Modifier
                  .fillMaxWidth()
-@@ -745,6 +856,53 @@ private fun OverviewContent(
+@@ -745,6 +864,53 @@ private fun OverviewContent(
                          Text(if (state == ServerState.RUNNING) stringResource(R.string.btn_stop) else stringResource(R.string.btn_start))
                      }
                  }
@@ -990,7 +1498,7 @@ index 81e662d..a80a697 100644
              }
          }
      }
-@@ -755,12 +913,21 @@ private fun FullscreenVideo(
+@@ -755,12 +921,21 @@ private fun FullscreenVideo(
      viewModel: MainViewModel,
      video: @Composable () -> Unit,
      onExitFullscreen: () -> Unit,
@@ -1013,7 +1521,7 @@ index 81e662d..a80a697 100644
      var controlsVisible by remember { mutableStateOf(true) }
      var tapTick by remember { mutableStateOf(0) }
      LaunchedEffect(tapTick) {
-@@ -768,11 +935,27 @@ private fun FullscreenVideo(
+@@ -768,11 +943,27 @@ private fun FullscreenVideo(
          delay(8000)
          controlsVisible = false
      }
@@ -1041,7 +1549,7 @@ index 81e662d..a80a697 100644
              .pointerInput(Unit) { detectTapGestures { tapTick++ } },
          contentAlignment = Alignment.Center
      ) {
-@@ -782,6 +965,24 @@ private fun FullscreenVideo(
+@@ -782,6 +973,24 @@ private fun FullscreenVideo(
              modifier = Modifier.align(Alignment.TopEnd)
          ) {
              Row(modifier = Modifier.padding(8.dp)) {
@@ -1066,6 +1574,183 @@ index 81e662d..a80a697 100644
                  IconButton(onClick = onPip, modifier = Modifier.dpadFocus()) {
                      Icon(
                          painterResource(R.drawable.ic_pip), contentDescription = stringResource(R.string.cd_pip),
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/SettingsScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/SettingsScreen.kt
+index 554fe10..7688a0c 100644
+--- a/app/src/main/kotlin/io/github/jqssun/airplay/ui/SettingsScreen.kt
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/SettingsScreen.kt
+@@ -48,8 +48,13 @@ fun SettingsScreen(viewModel: MainViewModel) {
+     val advertiseAudio by viewModel.advertiseAudio.collectAsState()
+     val launchOnConnect by viewModel.launchOnConnect.collectAsState()
+     val maxFps by viewModel.maxFps.collectAsState()
++    val qualityPreset by viewModel.qualityPreset.collectAsState()
+     val overscanned by viewModel.overscanned.collectAsState()
+     val requirePin by viewModel.requirePin.collectAsState()
++    val approvalRequired by viewModel.approvalRequired.collectAsState()
++    val trustedAddresses by viewModel.trustedAddresses.collectAsState()
++    var addressToRename by remember { mutableStateOf<String?>(null) }
++    var newAddressLabel by remember { mutableStateOf("") }
+     val allowNewConn by viewModel.allowNewConn.collectAsState()
+     val autoStart by viewModel.autoStart.collectAsState()
+     val bootAutoStart by viewModel.bootAutoStart.collectAsState()
+@@ -114,6 +119,66 @@ fun SettingsScreen(viewModel: MainViewModel) {
+             onCheckedChange = { viewModel.setRequirePin(it) }
+         )
+ 
++        SettingSwitch(
++            title = stringResource(R.string.mode_approval),
++            description = stringResource(R.string.trusted_address_notice),
++            checked = approvalRequired,
++            onCheckedChange = { viewModel.setApprovalRequired(it) }
++        )
++
++        if (trustedAddresses.isNotEmpty()) {
++            Text(stringResource(R.string.trusted_addresses_title),
++                style = MaterialTheme.typography.titleMedium,
++                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
++            trustedAddresses.sorted().forEach { address ->
++                ListItem(
++                    headlineContent = { Text(viewModel.trustedAddressLabel(address)) },
++                    supportingContent = { Text(address) },
++                    trailingContent = {
++                        Row {
++                            TextButton(onClick = {
++                                newAddressLabel = viewModel.trustedAddressLabel(address)
++                                addressToRename = address
++                            }, modifier = Modifier.dpadFocus()) {
++                                Text(stringResource(R.string.trusted_address_rename))
++                            }
++                            TextButton(onClick = { viewModel.forgetTrustedAddress(address) },
++                                modifier = Modifier.dpadFocus()) {
++                                Text(stringResource(R.string.trusted_address_forget))
++                            }
++                        }
++                    }
++                )
++            }
++        }
++
++        SettingSwitch(
++            title = stringResource(R.string.setting_audio_delay),
++            description = stringResource(R.string.setting_audio_delay_desc),
++            checked = audioLatencyMs >= 0,
++            onCheckedChange = { viewModel.setAudioLatencyMs(if (it) 250 else -1) }
++        )
++
++        if (audioLatencyMs >= 0) {
++            var sliderVal by remember(audioLatencyMs) { mutableFloatStateOf(audioLatencyMs.toFloat()) }
++            ListItem(
++                headlineContent = {
++                    Slider(
++                        value = sliderVal,
++                        onValueChange = { sliderVal = it },
++                        onValueChangeFinished = { viewModel.setAudioLatencyMs(sliderVal.roundToInt()) },
++                        valueRange = 0f..1000f,
++                        steps = 19,
++                        modifier = Modifier.dpadFocus().dpadAdjust(
++                            onLeft = { viewModel.setAudioLatencyMs((audioLatencyMs - 50).coerceIn(0, 1000)) },
++                            onRight = { viewModel.setAudioLatencyMs((audioLatencyMs + 50).coerceIn(0, 1000)) }
++                        )
++                    )
++                },
++                trailingContent = { Text(stringResource(R.string.audio_delay_value, sliderVal.roundToInt())) }
++            )
++        }
++
+         SettingSwitch(
+             title = stringResource(R.string.setting_allow_new_conn),
+             description = stringResource(R.string.setting_allow_new_conn_desc),
+@@ -157,6 +222,28 @@ fun SettingsScreen(viewModel: MainViewModel) {
+ 
+         SectionHeader(stringResource(R.string.section_display))
+ 
++        ListItem(
++            headlineContent = { Text(stringResource(R.string.quality_preset_title)) },
++            supportingContent = { Text(stringResource(R.string.quality_preset_desc)) }
++        )
++        Row(
++            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
++            horizontalArrangement = Arrangement.spacedBy(12.dp)
++        ) {
++            listOf(
++                "smooth" to R.string.quality_smooth,
++                "balanced" to R.string.quality_balanced,
++                "sharp" to R.string.quality_sharp
++            ).forEach { (preset, label) ->
++                FilterChip(
++                    selected = qualityPreset == preset,
++                    onClick = { viewModel.setQualityPreset(preset) },
++                    label = { Text(stringResource(label)) },
++                    modifier = Modifier.dpadFocus()
++                )
++            }
++        }
++
+         SettingSwitch(
+             title = stringResource(R.string.setting_auto_fullscreen),
+             description = stringResource(R.string.setting_auto_fullscreen_desc),
+@@ -308,33 +395,6 @@ fun SettingsScreen(viewModel: MainViewModel) {
+                 onCheckedChange = { viewModel.setScheduledOutputBufferRelease(it) }
+             )
+ 
+-            SettingSwitch(
+-                title = stringResource(R.string.setting_audio_delay),
+-                description = stringResource(R.string.setting_audio_delay_desc),
+-                checked = audioLatencyMs >= 0,
+-                onCheckedChange = { viewModel.setAudioLatencyMs(if (it) 250 else -1) }
+-            )
+-
+-            if (audioLatencyMs >= 0) {
+-                var sliderVal by remember(audioLatencyMs) { mutableFloatStateOf(audioLatencyMs.toFloat()) }
+-                ListItem(
+-                    headlineContent = {
+-                        Slider(
+-                            value = sliderVal,
+-                            onValueChange = { sliderVal = it },
+-                            onValueChangeFinished = { viewModel.setAudioLatencyMs(sliderVal.roundToInt()) },
+-                            valueRange = 0f..1000f,
+-                            steps = 19,
+-                            modifier = Modifier.dpadFocus().dpadAdjust(
+-                                onLeft = { viewModel.setAudioLatencyMs((audioLatencyMs - 50).coerceIn(0, 1000)) },
+-                                onRight = { viewModel.setAudioLatencyMs((audioLatencyMs + 50).coerceIn(0, 1000)) }
+-                            )
+-                        )
+-                    },
+-                    trailingContent = { Text(stringResource(R.string.audio_delay_value, sliderVal.roundToInt())) }
+-                )
+-            }
+-
+             SettingSwitch(
+                 title = stringResource(R.string.setting_audio_auto_buffer),
+                 description = stringResource(R.string.setting_audio_auto_buffer_desc),
+@@ -400,6 +460,28 @@ fun SettingsScreen(viewModel: MainViewModel) {
+             )
+         }
+     }
++
++    addressToRename?.let { address ->
++        AlertDialog(
++            onDismissRequest = { addressToRename = null },
++            title = { Text(stringResource(R.string.trusted_address_rename)) },
++            text = {
++                OutlinedTextField(value = newAddressLabel, onValueChange = { newAddressLabel = it },
++                    label = { Text(address) }, singleLine = true)
++            },
++            confirmButton = {
++                TextButton(onClick = {
++                    viewModel.renameTrustedAddress(address, newAddressLabel)
++                    addressToRename = null
++                }, modifier = Modifier.dpadFocus()) { Text(stringResource(R.string.btn_ok)) }
++            },
++            dismissButton = {
++                TextButton(onClick = { addressToRename = null }, modifier = Modifier.dpadFocus()) {
++                    Text(stringResource(R.string.captures_cancel))
++                }
++            }
++        )
++    }
+ }
+ 
+ private fun canAutoLaunch(ctx: Context): Boolean =
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt
 index 4f5f226..9dfe777 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/ui/theme/Theme.kt
@@ -1128,10 +1813,64 @@ index 4f5f226..9dfe777 100644
 +    MaterialTheme(colorScheme = FireMirrorColors, typography = Typography(), content = content)
  }
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt b/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
-index 197800c..03db32f 100644
+index 197800c..c5a8483 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
-@@ -165,6 +165,12 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -4,6 +4,7 @@ import android.app.Application
+ import android.content.Context
+ import android.content.Intent
+ import android.media.AudioManager
++import android.media.ToneGenerator
+ import android.os.SystemClock
+ import android.view.Surface
+ import androidx.core.content.FileProvider
+@@ -89,12 +90,31 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+     fun audioScanEnd() { service?.dacpController?.playResume() }
+     fun audioMuteToggle() { service?.dacpController?.muteToggle() }
+ 
++    fun testTvAudio(): Boolean = runCatching {
++        val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
++        val started = tone.startTone(ToneGenerator.TONE_PROP_BEEP, 500)
++        viewModelScope.launch {
++            delay(650)
++            tone.release()
++        }
++        started
++    }.getOrDefault(false)
++
+     private val _serverState = MutableStateFlow(ServerState.STOPPED)
+     val serverState: StateFlow<ServerState> = _serverState.asStateFlow()
+ 
+     private val _connectionCount = MutableStateFlow(0)
+     val connectionCount: StateFlow<Int> = _connectionCount.asStateFlow()
+ 
++    private val _networkAddress = MutableStateFlow<String?>(null)
++    val networkAddress: StateFlow<String?> = _networkAddress.asStateFlow()
++    private val _connectionEvent = MutableStateFlow("Waiting for a connection")
++    val connectionEvent: StateFlow<String> = _connectionEvent.asStateFlow()
++    private val _audioActive = MutableStateFlow(false)
++    val audioActive: StateFlow<Boolean> = _audioActive.asStateFlow()
++    private val _trustedAddresses = MutableStateFlow(prefs.getStringSet(Prefs.TRUSTED_ADDRESSES, emptySet())?.toSet().orEmpty())
++    val trustedAddresses: StateFlow<Set<String>> = _trustedAddresses.asStateFlow()
++
+     private val _pinCode = MutableStateFlow<String?>(null)
+     val pinCode: StateFlow<String?> = _pinCode.asStateFlow()
+ 
+@@ -158,6 +178,13 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+ 
+     private val _maxFps = MutableStateFlow(prefs.getInt(Prefs.MAX_FPS, Prefs.DEF_MAX_FPS))
+     val maxFps: StateFlow<Int> = _maxFps.asStateFlow()
++    private val _qualityPreset = MutableStateFlow(prefs.getString(Prefs.QUALITY_PRESET, null) ?: when {
++        _resolution.value == "1280x720" && _maxFps.value == 30 -> "smooth"
++        _resolution.value == "1920x1080" && _maxFps.value == 30 -> "balanced"
++        _resolution.value == Prefs.AUTO && _maxFps.value == 60 -> "sharp"
++        else -> "custom"
++    })
++    val qualityPreset: StateFlow<String> = _qualityPreset.asStateFlow()
+ 
+     private val _overscanned = MutableStateFlow(prefs.getBoolean(Prefs.OVERSCANNED, Prefs.DEF_OVERSCANNED))
+     val overscanned: StateFlow<Boolean> = _overscanned.asStateFlow()
+@@ -165,6 +192,12 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      private val _requirePin = MutableStateFlow(prefs.getBoolean(Prefs.REQUIRE_PIN, Prefs.DEF_REQUIRE_PIN))
      val requirePin: StateFlow<Boolean> = _requirePin.asStateFlow()
  
@@ -1144,7 +1883,7 @@ index 197800c..03db32f 100644
      private val _allowNewConn = MutableStateFlow(prefs.getBoolean(Prefs.ALLOW_NEW_CONN, Prefs.DEF_ALLOW_NEW_CONN))
      val allowNewConn: StateFlow<Boolean> = _allowNewConn.asStateFlow()
  
-@@ -186,6 +192,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -186,6 +219,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      private val _advertiseAudio = MutableStateFlow(prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO))
      val advertiseAudio: StateFlow<Boolean> = _advertiseAudio.asStateFlow()
  
@@ -1154,19 +1893,73 @@ index 197800c..03db32f 100644
      private val _launchOnConnect = MutableStateFlow(prefs.getBoolean(Prefs.LAUNCH_ON_CONNECT, Prefs.DEF_LAUNCH_ON_CONNECT))
      val launchOnConnect: StateFlow<Boolean> = _launchOnConnect.asStateFlow()
  
-@@ -398,6 +407,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
-     fun setMaxFps(v: Int) { _maxFps.value = v; prefs.edit().putInt(Prefs.MAX_FPS, v).apply(); _applyByServerRestart() }
+@@ -210,6 +246,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+ 
+     private val _debugInfo = MutableStateFlow(DebugInfo())
+     val debugInfo: StateFlow<DebugInfo> = _debugInfo.asStateFlow()
++    private var lastHealthSampleAt = 0L
+ 
+     // audio mode
+     private val _audioOnly = MutableStateFlow(false)
+@@ -353,8 +390,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+             delay(SERVER_RESTART_DEBOUNCE_MS)
+             val svc = service ?: return@launch
+             if (svc.serverState.value == ServerState.RUNNING) {
+-                svc.stopServer()
+-                svc.startServer(_serverName.value)
++                svc.restartServer(_serverName.value)
+             }
+         }
+     }
+@@ -394,10 +430,45 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+     fun setForceSwAlac(v: Boolean) { _forceSwAlac.value = v; prefs.edit().putBoolean(Prefs.FORCE_SW_ALAC, v).apply() }
+     fun setAlacEnabled(v: Boolean) { _alacEnabled.value = v; prefs.edit().putBoolean(Prefs.ALAC_ENABLED, v).apply(); _applyByServerRestart() }
+     fun setAacEnabled(v: Boolean) { _aacEnabled.value = v; prefs.edit().putBoolean(Prefs.AAC_ENABLED, v).apply(); _applyByServerRestart() }
+-    fun setResolution(v: String) { _resolution.value = v; prefs.edit().putString(Prefs.RESOLUTION, v).apply(); _applyByServerRestart() }
+-    fun setMaxFps(v: Int) { _maxFps.value = v; prefs.edit().putInt(Prefs.MAX_FPS, v).apply(); _applyByServerRestart() }
++    fun setResolution(v: String) { _resolution.value = v; _qualityPreset.value = "custom"; prefs.edit().putString(Prefs.RESOLUTION, v).putString(Prefs.QUALITY_PRESET, "custom").apply(); _applyByServerRestart() }
++    fun setMaxFps(v: Int) { _maxFps.value = v; _qualityPreset.value = "custom"; prefs.edit().putInt(Prefs.MAX_FPS, v).putString(Prefs.QUALITY_PRESET, "custom").apply(); _applyByServerRestart() }
++    fun setQualityPreset(preset: String) {
++        val (resolution, fps) = when (preset) {
++            "smooth" -> "1280x720" to 30
++            "balanced" -> "1920x1080" to 30
++            "sharp" -> Prefs.AUTO to 60
++            else -> return
++        }
++        _qualityPreset.value = preset
++        _resolution.value = resolution
++        _maxFps.value = fps
++        prefs.edit().putString(Prefs.QUALITY_PRESET, preset)
++            .putString(Prefs.RESOLUTION, resolution).putInt(Prefs.MAX_FPS, fps).apply()
++        _applyByServerRestart()
++    }
      fun setOverscanned(v: Boolean) { _overscanned.value = v; prefs.edit().putBoolean(Prefs.OVERSCANNED, v).apply(); _applyByServerRestart() }
      fun setRequirePin(v: Boolean) { _requirePin.value = v; prefs.edit().putBoolean(Prefs.REQUIRE_PIN, v).apply(); _applyByServerRestart() }
 +    fun setApprovalRequired(v: Boolean) {
 +        _approvalRequired.value = v
 +        prefs.edit().putBoolean(Prefs.APPROVAL_REQUIRED, v).apply()
 +    }
-+    fun answerConnectionRequest(allow: Boolean) { service?.answerConnectionRequest(allow) }
++    fun answerConnectionRequest(allow: Boolean, rememberAddress: Boolean = false) {
++        service?.answerConnectionRequest(allow, rememberAddress)
++    }
++    fun forgetTrustedAddress(address: String) {
++        prefs.edit().remove(Prefs.TRUSTED_LABEL_PREFIX + address).apply()
++        service?.forgetTrustedAddress(address) ?: run {
++            val updated = _trustedAddresses.value - address
++            prefs.edit().putStringSet(Prefs.TRUSTED_ADDRESSES, updated).apply()
++            _trustedAddresses.value = updated
++        }
++    }
++    fun trustedAddressLabel(address: String): String =
++        prefs.getString(Prefs.TRUSTED_LABEL_PREFIX + address, address).orEmpty()
++    fun renameTrustedAddress(address: String, label: String) {
++        val clean = label.trim().take(40)
++        if (clean.isNotEmpty()) prefs.edit().putString(Prefs.TRUSTED_LABEL_PREFIX + address, clean).apply()
++    }
      fun setAllowNewConn(v: Boolean) { _allowNewConn.value = v; prefs.edit().putBoolean(Prefs.ALLOW_NEW_CONN, v).apply(); _applyByServerRestart() }
      fun setAudioLatencyMs(v: Int) { _audioLatencyMs.value = v; prefs.edit().putInt(Prefs.AUDIO_LATENCY_MS, v).apply(); _applyByServerRestart() }
      fun setIdlePreview(v: Boolean) { _idlePreview.value = v; prefs.edit().putBoolean(Prefs.IDLE_PREVIEW, v).apply() }
-@@ -405,6 +419,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -405,6 +476,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      fun setKeepScreenOn(v: Boolean) { _keepScreenOn.value = v; prefs.edit().putBoolean(Prefs.KEEP_SCREEN_ON, v).apply() }
      fun setAdvertiseVideo(v: Boolean) { _advertiseVideo.value = v; prefs.edit().putBoolean(Prefs.ADVERTISE_VIDEO, v).apply(); _applyByServerRestart() }
      fun setAdvertiseAudio(v: Boolean) { _advertiseAudio.value = v; prefs.edit().putBoolean(Prefs.ADVERTISE_AUDIO, v).apply(); _applyByServerRestart() }
@@ -1178,14 +1971,29 @@ index 197800c..03db32f 100644
      fun setLaunchOnConnect(v: Boolean) { _launchOnConnect.value = v; prefs.edit().putBoolean(Prefs.LAUNCH_ON_CONNECT, v).apply() }
      fun setDebugEnabled(v: Boolean) { _debugEnabled.value = v; prefs.edit().putBoolean(Prefs.DEBUG_ENABLED, v).apply() }
      fun setDeveloperOptions(v: Boolean) {
-@@ -551,6 +570,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -551,6 +627,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
          service?.let {
              _serverState.value = it.serverState.value
              _connectionCount.value = it.connectionCount.value
++            _networkAddress.value = it.networkAddress.value
++            _connectionEvent.value = it.connectionEvent.value
++            _audioActive.value = it.audioActive.value
++            _trustedAddresses.value = it.trustedAddresses.value
 +            _pendingApproval.value = it.pendingApproval.value
              _videoAspect.value = it.videoAspect.value
              _videoResolution.value = it.videoResolution.value
              _audioOnly.value = it.audioOnly.value
+@@ -595,8 +676,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+             }
+             _mirroringActive.value = it.mirroringActive.value
+             _trackInfo.value = it.trackInfo.value
+-            if (_debugEnabled.value) {
++            if (_debugEnabled.value || SystemClock.elapsedRealtime() - lastHealthSampleAt >= 1000L) {
+                 _debugInfo.value = it.collectDebugInfo()
++                lastHealthSampleAt = SystemClock.elapsedRealtime()
+             }
+         }
+     }
 diff --git a/app/src/main/res/drawable-xhdpi/firemirror_banner.png b/app/src/main/res/drawable-xhdpi/firemirror_banner.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..612b1ca3810a283b9a4e5c37676850c9fba27dae
@@ -2371,10 +3179,10 @@ index cb3af28..2736038 100644
 +        android:pathData="M24,73.5 A4.5,4.5 0,1 1,24,82.5 A4.5,4.5 0,1 1,24,73.5 Z" />
  </vector>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 9a17a5d..7dbcac2 100644
+index 9a17a5d..0af825b 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,17 +1,18 @@
+@@ -1,17 +1,19 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">AirPlay Server</string>
@@ -2393,10 +3201,11 @@ index 9a17a5d..7dbcac2 100644
      <!-- Tabs -->
      <string name="tab_overview">Overview</string>
 +    <string name="tab_captures">Captures</string>
++    <string name="tab_health">Health</string>
      <string name="tab_logs">Logs</string>
      <string name="tab_settings">Settings</string>
  
-@@ -26,6 +27,37 @@
+@@ -26,6 +28,54 @@
      <string name="btn_start">Start</string>
      <string name="btn_stop">Stop</string>
      <string name="unknown_track">Unknown</string>
@@ -2412,9 +3221,19 @@ index 9a17a5d..7dbcac2 100644
 +    <string name="mode_audio">Audio only</string>
 +    <string name="mode_approval">Approve connections</string>
 +    <string name="approval_title">Allow this connection?</string>
-+    <string name="approval_message">A device at %1$s wants to connect. Allow it until FireMirror stops?</string>
-+    <string name="approval_allow">Allow</string>
++    <string name="approval_message">A device at %1$s wants to connect. Network addresses can change or be reused by another device.</string>
++    <string name="approval_allow">Allow once</string>
++    <string name="approval_always">Remember address</string>
 +    <string name="approval_deny">Deny</string>
++    <string name="trusted_addresses_title">Remembered network addresses</string>
++    <string name="trusted_address_forget">Forget</string>
++    <string name="trusted_address_rename">Rename</string>
++    <string name="trusted_address_notice">Ask before new connections. Remembered addresses can change or be reused by another device.</string>
++    <string name="quality_preset_title">Mirroring quality</string>
++    <string name="quality_preset_desc">Smooth: 720p 30 fps. Balanced: 1080p 30 fps. Sharp: TV resolution up to 60 fps. Changing quality restarts the receiver, so reconnect from your Mac.</string>
++    <string name="quality_smooth">Smooth</string>
++    <string name="quality_balanced">Balanced</string>
++    <string name="quality_sharp">Sharp</string>
 +    <string name="cd_zoom_in">Zoom in</string>
 +    <string name="cd_zoom_out">Zoom out</string>
 +    <string name="cd_capture">Save screenshot</string>
@@ -2427,6 +3246,13 @@ index 9a17a5d..7dbcac2 100644
 +    <string name="captures_empty">Screenshots and recordings will appear here after you save one.</string>
 +    <string name="captures_refresh">Refresh</string>
 +    <string name="captures_share">Share</string>
++    <string name="captures_preview">Open</string>
++    <string name="captures_play_pause">Play or pause</string>
++    <string name="captures_close">Close</string>
++    <string name="captures_download">Download</string>
++    <string name="captures_download_title">Download to your Mac</string>
++    <string name="captures_download_hint">On your Mac, open this private address in a browser. Keep this dialog open. The link expires after ten minutes and works only on your local network.</string>
++    <string name="captures_no_network">Connect the Fire TV to your local network first.</string>
 +    <string name="captures_delete">Delete</string>
 +    <string name="captures_cancel">Cancel</string>
 +    <string name="captures_delete_title">Delete this capture?</string>
@@ -2434,6 +3260,15 @@ index 9a17a5d..7dbcac2 100644
  
      <!-- Content descriptions -->
      <string name="cd_pip">Picture-in-Picture</string>
+@@ -152,7 +202,7 @@
+     <string name="setting_scheduled_output_buffer_release">Aligned frame pacing</string>
+     <string name="setting_scheduled_output_buffer_release_desc">Schedule each decoded frame to the VSYNC matching its presentation timestamp</string>
+     <string name="setting_audio_delay">Override audio delay</string>
+-    <string name="setting_audio_delay_desc">Set a custom audio latency reported to client</string>
++    <string name="setting_audio_delay_desc">Set a custom audio latency reported to the sender. Changing this restarts FireMirror.</string>
+     <string name="audio_delay_value">%dms</string>
+     <string name="setting_audio_auto_buffer">Automatic software audio buffer size</string>
+     <string name="setting_audio_auto_buffer_desc">Adaptively tune the software audio buffer according to network conditions and device performance; slider adjusts how much jitter the buffer can absorb</string>
 diff --git a/app/src/main/res/xml/file_paths.xml b/app/src/main/res/xml/file_paths.xml
 index d2e2c8d..95a614a 100644
 --- a/app/src/main/res/xml/file_paths.xml
@@ -2444,3 +3279,39 @@ index d2e2c8d..95a614a 100644
      <cache-path name="cache" path="." />
 +    <external-files-path name="captures" path="." />
  </paths>
+diff --git a/app/src/test/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServerTest.kt b/app/src/test/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServerTest.kt
+new file mode 100644
+index 0000000..1a2be6b
+--- /dev/null
++++ b/app/src/test/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServerTest.kt
+@@ -0,0 +1,30 @@
++package io.github.jqssun.airplay.capture
++
++import java.io.File
++import java.net.HttpURLConnection
++import java.net.URL
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class CaptureTransferServerTest {
++    @Test
++    fun onlyTheTemporaryPrivateLinkDownloadsTheSelectedCapture() {
++        val file = File.createTempFile("FireMirror_test_", ".png")
++        val content = byteArrayOf(1, 2, 3, 4, 5)
++        file.writeBytes(content)
++        try {
++            CaptureTransferServer(file, "127.0.0.1").use { server ->
++                val good = URL(server.url).openConnection() as HttpURLConnection
++                assertEquals(200, good.responseCode)
++                assertEquals("image/png", good.contentType)
++                assertArrayEquals(content, good.inputStream.use { it.readBytes() })
++
++                val bad = URL(server.url + "wrong").openConnection() as HttpURLConnection
++                assertEquals(404, bad.responseCode)
++            }
++        } finally {
++            file.delete()
++        }
++    }
++}
