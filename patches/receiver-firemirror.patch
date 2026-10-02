@@ -950,10 +950,10 @@ index 9390300..2632aad 100644
  
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt
 new file mode 100644
-index 0000000..1956a19
+index 0000000..d1d6705
 --- /dev/null
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,105 @@
 +package io.github.jqssun.airplay.service
 +
 +import android.util.Log
@@ -1032,7 +1032,8 @@ index 0000000..1956a19
 +                started = true
 +                output.writeByte(1)
 +                output.flush()
-+                it.soTimeout = 10_000
++                it.soTimeout = 0
++                it.keepAlive = true
 +                while (running) {
 +                    val length = input.readInt()
 +                    if (length !in 1..MAX_FRAME_BYTES) break
