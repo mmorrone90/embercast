@@ -48,11 +48,15 @@ class ShareService : Service() {
     @Volatile private var audioRecord: AudioRecord? = null
     @Volatile private var audioThread: Thread? = null
     @Volatile private var audioActive = false
+    @Volatile private var phoneMuted = false
+    private lateinit var phoneMediaVolume: PhoneMediaVolume
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        phoneMediaVolume = PhoneMediaVolume(this)
+        phoneMediaVolume.restore()
         val notifications = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notifications.createNotificationChannel(NotificationChannel(CHANNEL, "Screen sharing", NotificationManager.IMPORTANCE_LOW))
     }
@@ -127,8 +131,7 @@ class ShareService : Service() {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null
             )
             if (audioEnabled) startPlaybackAudio(screen, output)
-            status = if (audioActive) "Showing your screen and supported app sound on FireMirror"
-                else "Showing your screen on FireMirror; phone audio is unavailable"
+            status = sharingStatus()
             encodeLoop(output, initialSize, metrics.densityDpi)
         } catch (e: Exception) {
             if (sharing.get()) {
@@ -205,11 +208,15 @@ class ShareService : Service() {
                 audioRecord = record
                 PhoneMirrorPackets.audioFormat(output)
                 audioActive = true
+                phoneMuted = phoneMediaVolume.mute()
                 audioThread = Thread({ sendAudio(record, output) }, "PhoneMirrorAudio").apply { start() }
             } catch (e: Exception) {
                 runCatching { record.stop() }
                 record.release()
                 audioRecord = null
+                audioActive = false
+                phoneMuted = false
+                phoneMediaVolume.restore()
                 throw e
             }
         } catch (e: Exception) {
@@ -238,6 +245,8 @@ class ShareService : Service() {
             if (sharing.get()) Log.w(TAG, "Phone audio stream ended", e)
         } finally {
             audioActive = false
+            phoneMediaVolume.restore()
+            phoneMuted = false
             if (sharing.get()) {
                 runCatching { PhoneMirrorPackets.audioEnded(output) }
                 status = "Showing your screen on FireMirror; phone audio is unavailable"
@@ -277,8 +286,7 @@ class ShareService : Service() {
                     codec = encoder ?: error("Screen encoder restart failed")
                     currentSize = nextSize
                     config = ByteArray(0)
-                    status = if (audioActive) "Showing your screen and supported app sound on FireMirror"
-                        else "Showing your screen on FireMirror; phone audio is unavailable"
+                    status = sharingStatus()
                 }
             }
             when (val index = codec.dequeueOutputBuffer(info, 10_000)) {
@@ -331,6 +339,12 @@ class ShareService : Service() {
             .build()
     }
 
+    private fun sharingStatus() = when {
+        audioActive && phoneMuted -> "Showing your screen and app sound on FireMirror; phone media is silent"
+        audioActive -> "Showing your screen and app sound on FireMirror; phone media may also play"
+        else -> "Showing your screen on FireMirror; phone audio is unavailable"
+    }
+
     private fun finish(message: String?) {
         if (!sharing.getAndSet(false)) return
         running = false
@@ -351,6 +365,8 @@ class ShareService : Service() {
         audioRecord = null
         audioThread = null
         audioActive = false
+        phoneMediaVolume.restore()
+        phoneMuted = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

@@ -50,6 +50,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!ShareService.running) PhoneMediaVolume(this).restore()
         window.statusBarColor = BACKGROUND
         window.navigationBarColor = BACKGROUND
         manager = getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -126,7 +127,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(20), 0, dp(10))
         }
         page.addView(status)
-        page.addView(label("The TV will ask you to approve the connection. Android will ask to capture your screen and supported app audio. If you decline audio permission, video still works. Use a trusted WiFi network.", 13f, MUTED, false).apply {
+        page.addView(label("The TV will ask you to approve the connection. Android will ask to capture your screen and supported app audio. While sharing app sound, your phone's media speaker is muted and its previous volume is restored when you stop. If you decline audio permission, video still works. Use a trusted WiFi network.", 13f, MUTED, false).apply {
             setPadding(0, dp(24), 0, 0)
         })
     }
