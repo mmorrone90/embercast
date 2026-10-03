@@ -30,12 +30,15 @@ import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ShareService : Service() {
+    private data class CaptureSize(val width: Int, val height: Int)
+
     private val sharing = AtomicBoolean(false)
     @Volatile private var socket: Socket? = null
     @Volatile private var projection: MediaProjection? = null
     @Volatile private var encoder: MediaCodec? = null
     @Volatile private var virtualDisplay: VirtualDisplay? = null
     @Volatile private var inputSurface: Surface? = null
+    @Volatile private var requestedSize: CaptureSize? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -77,9 +80,7 @@ class ShareService : Service() {
             val metrics = DisplayMetrics()
             @Suppress("DEPRECATION")
             (getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
-            val scale = 960.0 / maxOf(metrics.widthPixels, metrics.heightPixels)
-            val width = ((metrics.widthPixels * scale).toInt() and -2).coerceAtLeast(64)
-            val height = ((metrics.heightPixels * scale).toInt() and -2).coerceAtLeast(64)
+            val initialSize = scaledSize(metrics.widthPixels, metrics.heightPixels)
             val connection = Socket()
             socket = connection
             connection.connect(InetSocketAddress(host, port), 8_000)
@@ -87,8 +88,8 @@ class ShareService : Service() {
             val output = DataOutputStream(connection.getOutputStream())
             val input = DataInputStream(connection.getInputStream())
             output.writeInt(MAGIC)
-            output.writeInt(width)
-            output.writeInt(height)
+            output.writeInt(initialSize.width)
+            output.writeInt(initialSize.height)
             output.flush()
             status = "Approve the phone on your TV"
             if (input.readUnsignedByte() != 1) {
@@ -97,18 +98,7 @@ class ShareService : Service() {
             }
             connection.soTimeout = 0
 
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 2_500_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-            }
-            val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            encoder = codec
-            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            val surface = codec.createInputSurface()
-            inputSurface = surface
-            codec.start()
+            val surface = createEncoder(initialSize)
 
             val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val screen = projectionManager.getMediaProjection(result, data)
@@ -116,13 +106,18 @@ class ShareService : Service() {
             projection = screen
             screen.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() { finish("Screen sharing ended") }
+                override fun onCapturedContentResize(width: Int, height: Int) {
+                    if (Build.VERSION.SDK_INT >= 34 && width > 0 && height > 0) {
+                        requestedSize = scaledSize(width, height)
+                    }
+                }
             }, Handler(Looper.getMainLooper()))
             virtualDisplay = screen.createVirtualDisplay(
-                "FireMirror", width, height, metrics.densityDpi,
+                "FireMirror", initialSize.width, initialSize.height, metrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null
             )
             status = "Showing your phone on FireMirror"
-            encodeLoop(codec, output)
+            encodeLoop(output, initialSize, metrics.densityDpi)
         } catch (e: Exception) {
             if (sharing.get()) {
                 Log.w(TAG, "Phone sharing failed", e)
@@ -133,10 +128,75 @@ class ShareService : Service() {
         }
     }
 
-    private fun encodeLoop(codec: MediaCodec, output: DataOutputStream) {
+    private fun scaledSize(width: Int, height: Int): CaptureSize {
+        val scale = 960.0 / maxOf(width, height)
+        return CaptureSize(
+            ((width * scale).toInt() and -2).coerceAtLeast(64),
+            ((height * scale).toInt() and -2).coerceAtLeast(64)
+        )
+    }
+
+    private fun createEncoder(size: CaptureSize): Surface {
+        val format = MediaFormat.createVideoFormat(
+            MediaFormat.MIMETYPE_VIDEO_AVC, size.width, size.height
+        ).apply {
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            setInteger(MediaFormat.KEY_BIT_RATE, 2_500_000)
+            setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+        }
+        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        try {
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val surface = codec.createInputSurface()
+            codec.start()
+            encoder = codec
+            inputSurface = surface
+            return surface
+        } catch (e: Exception) {
+            codec.release()
+            throw e
+        }
+    }
+
+    private fun encodeLoop(output: DataOutputStream, initialSize: CaptureSize, densityDpi: Int) {
         val info = MediaCodec.BufferInfo()
+        var currentSize = initialSize
+        var codec = encoder ?: error("Screen encoder was not started")
         var config = ByteArray(0)
+        var lastSizeCheck = 0L
         while (sharing.get()) {
+            if (Build.VERSION.SDK_INT < 34 && System.currentTimeMillis() - lastSizeCheck >= 500) {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                (getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(metrics)
+                requestedSize = scaledSize(metrics.widthPixels, metrics.heightPixels)
+                lastSizeCheck = System.currentTimeMillis()
+            }
+            val nextSize = requestedSize
+            if (nextSize != null) {
+                requestedSize = null
+                if (nextSize != currentSize) {
+                    val display = virtualDisplay ?: error("Screen projection ended")
+                    display.setSurface(null)
+                    codec.stop()
+                    codec.release()
+                    inputSurface?.release()
+                    encoder = null
+                    inputSurface = null
+                    val surface = createEncoder(nextSize)
+                    display.resize(nextSize.width, nextSize.height, densityDpi)
+                    display.setSurface(surface)
+                    output.writeInt(0)
+                    output.writeInt(nextSize.width)
+                    output.writeInt(nextSize.height)
+                    output.flush()
+                    codec = encoder ?: error("Screen encoder restart failed")
+                    currentSize = nextSize
+                    config = ByteArray(0)
+                    status = "Showing your phone on FireMirror"
+                }
+            }
             when (val index = codec.dequeueOutputBuffer(info, 10_000)) {
                 MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     val format = codec.outputFormat
