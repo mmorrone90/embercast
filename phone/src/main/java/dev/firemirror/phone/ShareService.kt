@@ -1,5 +1,6 @@
 package dev.firemirror.phone
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,9 +8,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioPlaybackCaptureConfiguration
+import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -39,6 +45,9 @@ class ShareService : Service() {
     @Volatile private var virtualDisplay: VirtualDisplay? = null
     @Volatile private var inputSurface: Surface? = null
     @Volatile private var requestedSize: CaptureSize? = null
+    @Volatile private var audioRecord: AudioRecord? = null
+    @Volatile private var audioThread: Thread? = null
+    @Volatile private var audioActive = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -64,6 +73,7 @@ class ShareService : Service() {
         val host = intent.getStringExtra(EXTRA_HOST).orEmpty()
         val port = intent.getIntExtra(EXTRA_PORT, 7102)
         val result = intent.getIntExtra(EXTRA_RESULT, 0)
+        val audioEnabled = intent.getBooleanExtra(EXTRA_AUDIO_ENABLED, false)
         @Suppress("DEPRECATION")
         val data = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(EXTRA_DATA, Intent::class.java)
             else intent.getParcelableExtra(EXTRA_DATA)
@@ -71,11 +81,11 @@ class ShareService : Service() {
             finish("Screen sharing permission was not available")
             return START_NOT_STICKY
         }
-        Thread({ share(host, port, result, data) }, "PhoneMirrorSender").start()
+        Thread({ share(host, port, result, data, audioEnabled) }, "PhoneMirrorSender").start()
         return START_NOT_STICKY
     }
 
-    private fun share(host: String, port: Int, result: Int, data: Intent) {
+    private fun share(host: String, port: Int, result: Int, data: Intent, audioEnabled: Boolean) {
         try {
             val metrics = DisplayMetrics()
             @Suppress("DEPRECATION")
@@ -87,7 +97,7 @@ class ShareService : Service() {
             connection.soTimeout = 35_000
             val output = DataOutputStream(connection.getOutputStream())
             val input = DataInputStream(connection.getInputStream())
-            output.writeInt(MAGIC)
+            output.writeInt(PhoneMirrorPackets.MAGIC)
             output.writeInt(initialSize.width)
             output.writeInt(initialSize.height)
             output.flush()
@@ -116,7 +126,9 @@ class ShareService : Service() {
                 "FireMirror", initialSize.width, initialSize.height, metrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null
             )
-            status = "Showing your phone on FireMirror"
+            if (audioEnabled) startPlaybackAudio(screen, output)
+            status = if (audioActive) "Showing your screen and supported app sound on FireMirror"
+                else "Showing your screen on FireMirror; phone audio is unavailable"
             encodeLoop(output, initialSize, metrics.densityDpi)
         } catch (e: Exception) {
             if (sharing.get()) {
@@ -159,6 +171,80 @@ class ShareService : Service() {
         }
     }
 
+    private fun startPlaybackAudio(screen: MediaProjection, output: DataOutputStream) {
+        if (Build.VERSION.SDK_INT < 29 || checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        try {
+            val format = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(PhoneMirrorPackets.AUDIO_SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
+                .build()
+            val capture = AudioPlaybackCaptureConfiguration.Builder(screen)
+                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                .build()
+            val minimum = AudioRecord.getMinBufferSize(
+                PhoneMirrorPackets.AUDIO_SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            require(minimum > 0) { "Audio capture format is not supported" }
+            val record = AudioRecord.Builder()
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(maxOf(minimum, PhoneMirrorPackets.AUDIO_CHUNK_BYTES * 4))
+                .setAudioPlaybackCaptureConfig(capture)
+                .build()
+            if (record.state != AudioRecord.STATE_INITIALIZED) {
+                record.release()
+                error("Audio capture could not start")
+            }
+            try {
+                record.startRecording()
+                check(record.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Audio capture was denied" }
+                audioRecord = record
+                PhoneMirrorPackets.audioFormat(output)
+                audioActive = true
+                audioThread = Thread({ sendAudio(record, output) }, "PhoneMirrorAudio").apply { start() }
+            } catch (e: Exception) {
+                runCatching { record.stop() }
+                record.release()
+                audioRecord = null
+                throw e
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Phone playback audio is unavailable", e)
+        }
+    }
+
+    private fun sendAudio(record: AudioRecord, output: DataOutputStream) {
+        val chunk = ByteArray(PhoneMirrorPackets.AUDIO_CHUNK_BYTES)
+        var signalSeen = false
+        try {
+            while (sharing.get()) {
+                val count = record.read(chunk, 0, chunk.size, AudioRecord.READ_BLOCKING)
+                if (count == 0) continue
+                if (count < 0) {
+                    Log.w(TAG, "Audio capture stopped: $count")
+                    break
+                }
+                if (!signalSeen && (0 until count).any { chunk[it] != 0.toByte() }) {
+                    signalSeen = true
+                    Log.i(TAG, "Capturing non-silent app audio")
+                }
+                PhoneMirrorPackets.audio(output, System.nanoTime(), chunk, count)
+            }
+        } catch (e: Exception) {
+            if (sharing.get()) Log.w(TAG, "Phone audio stream ended", e)
+        } finally {
+            audioActive = false
+            if (sharing.get()) {
+                runCatching { PhoneMirrorPackets.audioEnded(output) }
+                status = "Showing your screen on FireMirror; phone audio is unavailable"
+            }
+        }
+    }
+
     private fun encodeLoop(output: DataOutputStream, initialSize: CaptureSize, densityDpi: Int) {
         val info = MediaCodec.BufferInfo()
         var currentSize = initialSize
@@ -187,14 +273,12 @@ class ShareService : Service() {
                     val surface = createEncoder(nextSize)
                     display.resize(nextSize.width, nextSize.height, densityDpi)
                     display.setSurface(surface)
-                    output.writeInt(0)
-                    output.writeInt(nextSize.width)
-                    output.writeInt(nextSize.height)
-                    output.flush()
+                    PhoneMirrorPackets.resize(output, nextSize.width, nextSize.height)
                     codec = encoder ?: error("Screen encoder restart failed")
                     currentSize = nextSize
                     config = ByteArray(0)
-                    status = "Showing your phone on FireMirror"
+                    status = if (audioActive) "Showing your screen and supported app sound on FireMirror"
+                        else "Showing your screen on FireMirror; phone audio is unavailable"
                 }
             }
             when (val index = codec.dequeueOutputBuffer(info, 10_000)) {
@@ -223,9 +307,7 @@ class ShareService : Service() {
                         }
                         val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
                         val packet = if (key && config.isNotEmpty()) config + normalized else normalized
-                        output.writeInt(packet.size)
-                        output.writeLong(info.presentationTimeUs * 1_000)
-                        output.write(packet)
+                        PhoneMirrorPackets.video(output, info.presentationTimeUs * 1_000, packet)
                     } finally {
                         codec.releaseOutputBuffer(index, false)
                     }
@@ -254,6 +336,8 @@ class ShareService : Service() {
         running = false
         if (message != null) status = message
         runCatching { socket?.close() }
+        runCatching { audioRecord?.stop() }
+        runCatching { audioRecord?.release() }
         runCatching { virtualDisplay?.release() }
         runCatching { projection?.stop() }
         runCatching { encoder?.stop() }
@@ -264,6 +348,9 @@ class ShareService : Service() {
         projection = null
         encoder = null
         inputSurface = null
+        audioRecord = null
+        audioThread = null
+        audioActive = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -277,13 +364,13 @@ class ShareService : Service() {
         private const val TAG = "ShareService"
         private const val CHANNEL = "firemirror_sharing"
         private const val NOTIFICATION_ID = 1
-        private const val MAGIC = 0x464D5031
         const val ACTION_START = "dev.firemirror.phone.START"
         const val ACTION_STOP = "dev.firemirror.phone.STOP"
         const val EXTRA_HOST = "host"
         const val EXTRA_PORT = "port"
         const val EXTRA_RESULT = "result"
         const val EXTRA_DATA = "data"
+        const val EXTRA_AUDIO_ENABLED = "audio_enabled"
         @Volatile var status = "Ready to share"
         @Volatile var running = false
     }

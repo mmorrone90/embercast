@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 2604452..7d22c3c 100644
+index 2604452..e67abfb 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -31,11 +31,11 @@ android {
@@ -12,8 +12,8 @@ index 2604452..7d22c3c 100644
          targetSdk = 36
 -        versionCode = 31
 -        versionName = "0.0.31"
-+        versionCode = 10
-+        versionName = "0.5.1"
++        versionCode = 11
++        versionName = "0.6.0"
  
          externalNativeBuild {
              cmake {
@@ -596,7 +596,7 @@ index 471193f..766312e 100644
  
      fun release() {
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
-index 9390300..cd36483 100644
+index 9390300..eeaf23c 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
 @@ -13,6 +13,9 @@ import android.content.pm.ServiceInfo
@@ -620,16 +620,17 @@ index 9390300..cd36483 100644
  import kotlin.math.abs
  import kotlin.math.roundToInt
  import kotlinx.coroutines.flow.MutableStateFlow
-@@ -71,6 +77,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -71,6 +77,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
  
      private var nativeHandle = 0L
      private var nsdManager: NsdServiceManager? = null
 +    private var phoneMirrorServer: PhoneMirrorServer? = null
++    private val phoneAudioPlayer = PhoneAudioPlayer()
 +    @Volatile private var phoneMirrorActive = false
      private var wakeLock: PowerManager.WakeLock? = null
      private var foregroundStarted = false
      private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
-@@ -94,6 +102,64 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -94,6 +103,64 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      private val _connectionCount = MutableStateFlow(0)
      val connectionCount = _connectionCount.asStateFlow()
  
@@ -694,7 +695,7 @@ index 9390300..cd36483 100644
      private val _videoAspect = MutableStateFlow(16f / 9f)
      val videoAspect = _videoAspect.asStateFlow()
  
-@@ -207,6 +273,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -207,6 +274,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
  
      override fun onCreate() {
          super.onCreate()
@@ -706,7 +707,7 @@ index 9390300..cd36483 100644
          createNotificationChannel()
          dacpController = DacpController(this)
          dacpPlayer = DacpPlayer(
-@@ -343,8 +414,18 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -343,8 +415,18 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          startServer(name, ensureServiceStarted = true)
      }
  
@@ -725,7 +726,7 @@ index 9390300..cd36483 100644
          val effectiveName = name.ifBlank { Prefs.DEF_SERVER_NAME }
  
          val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-@@ -428,9 +509,62 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -428,9 +510,81 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          if (prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO)) {
              nsdManager?.registerRaop(raopName, port, raopTxt)
          }
@@ -767,9 +768,28 @@ index 9390300..cd36483 100644
 +                    if (phoneMirrorActive) videoRenderer.feedFrame(bytes, timestampNs, false)
 +                }
 +
++                override fun audioStarted(sampleRate: Int, channels: Int) {
++                    if (!phoneMirrorActive) return
++                    val playing = phoneAudioPlayer.start(sampleRate, channels)
++                    _audioActive.value = playing
++                    if (playing) _connectionEvent.value = "Android phone connected with audio"
++                }
++
++                override fun audioFrame(bytes: ByteArray, timestampNs: Long) {
++                    if (phoneMirrorActive) phoneAudioPlayer.write(bytes)
++                }
++
++                override fun audioEnded() {
++                    phoneAudioPlayer.stop()
++                    _audioActive.value = false
++                    if (phoneMirrorActive) _connectionEvent.value = "Android phone connected without audio"
++                }
++
 +                override fun ended() {
 +                    if (!phoneMirrorActive) return
 +                    phoneMirrorActive = false
++                    phoneAudioPlayer.stop()
++                    _audioActive.value = false
 +                    videoRenderer.stopSession()
 +                    _mirroringActive.value = false
 +                    _connectionCount.value = 0
@@ -789,7 +809,7 @@ index 9390300..cd36483 100644
          if (ensureServiceStarted) {
              ContextCompat.startForegroundService(this, Intent(this, AirPlayService::class.java))
          }
-@@ -482,13 +616,20 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -482,13 +636,21 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          wakeLock?.release()
          wakeLock = null
          _serverState.value = ServerState.ERROR
@@ -806,12 +826,13 @@ index 9390300..cd36483 100644
 +        phoneMirrorActive = false
 +        phoneMirrorServer?.stop()
 +        phoneMirrorServer = null
++        phoneAudioPlayer.stop()
 +        denyPendingApproval()
 +        synchronized(approvalLock) { approvedAddresses.clear() }
          audioRenderer.detachEngine()
          if (nativeHandle != 0L) {
              NativeBridge.nativeStop(nativeHandle)
-@@ -515,10 +656,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -515,10 +677,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          _durationMs.value = 0
          _serverState.value = ServerState.STOPPED
          _connectionCount.value = 0
@@ -824,7 +845,7 @@ index 9390300..cd36483 100644
          log("Server stopped")
      }
  
-@@ -579,6 +721,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -579,6 +742,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      }
  
      override fun onDestroy() {
@@ -833,7 +854,7 @@ index 9390300..cd36483 100644
          stopServer()
          dacpPlayer.release()
          mediaReceiver?.let {
-@@ -635,6 +779,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -635,6 +800,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          clearPin()
          audioRenderer.start()
          audioRenderer.setFormat(ct, spf)
@@ -841,7 +862,7 @@ index 9390300..cd36483 100644
          if (!usingScreen) _setPlaying(true)
          if (!usingScreen && !_audioOnly.value) {
              // pure music streaming (not screen mirroring audio)
-@@ -713,6 +858,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -713,6 +879,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      override fun onConnectionInit() {
          val firstConnection = _connectionCount.value == 0
          _connectionCount.value++
@@ -849,7 +870,7 @@ index 9390300..cd36483 100644
          log("Client connected (${_connectionCount.value})")
          if (!firstConnection) return
          // conn_init is only a tcp pre-auth signal. pin-required sessions must wait for
-@@ -722,6 +868,78 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -722,6 +889,78 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          launchMainActivity()
      }
  
@@ -928,7 +949,7 @@ index 9390300..cd36483 100644
      override fun onConnectionDestroy() {
          _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
          if (_connectionCount.value == 0) {
-@@ -729,6 +947,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -729,6 +968,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
              _endVideoPlayback("AirPlay Video stopped (disconnect)")
              // last client gone: release audio output devices to save power
              audioRenderer.stop()
@@ -936,7 +957,7 @@ index 9390300..cd36483 100644
              _audioOnly.value = false
              _lastVideoPollAt = 0
              _videoPollSuppressed = false
-@@ -750,10 +969,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -750,10 +990,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
              _updateMediaNotification()
          }
          log("Client disconnected (${_connectionCount.value})")
@@ -949,7 +970,7 @@ index 9390300..cd36483 100644
      }
  
      override fun onDisplayPin(pin: String) {
-@@ -798,6 +1019,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -798,6 +1040,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      }
  
      override fun onAudioTeardown() {
@@ -957,12 +978,87 @@ index 9390300..cd36483 100644
          _setPlaying(false)
      }
  
+diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneAudioPlayer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneAudioPlayer.kt
+new file mode 100644
+index 0000000..1a56a23
+--- /dev/null
++++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneAudioPlayer.kt
+@@ -0,0 +1,69 @@
++package io.github.jqssun.airplay.service
++
++import android.media.AudioAttributes
++import android.media.AudioFormat
++import android.media.AudioTrack
++import android.util.Log
++
++/** Plays the companion phone's PCM audio without blocking its video network reader. */
++class PhoneAudioPlayer {
++    private var track: AudioTrack? = null
++
++    @Synchronized fun start(sampleRate: Int, channels: Int): Boolean {
++        stop()
++        return try {
++            val channelMask = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
++            val minimum = AudioTrack.getMinBufferSize(sampleRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
++            require(minimum > 0) { "Unsupported phone audio format" }
++            val player = AudioTrack.Builder()
++                .setAudioAttributes(AudioAttributes.Builder()
++                    .setUsage(AudioAttributes.USAGE_MEDIA)
++                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
++                    .build())
++                .setAudioFormat(AudioFormat.Builder()
++                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
++                    .setSampleRate(sampleRate)
++                    .setChannelMask(channelMask)
++                    .build())
++                .setBufferSizeInBytes(maxOf(minimum, sampleRate * channels * 2 / 5))
++                .setTransferMode(AudioTrack.MODE_STREAM)
++                .build()
++            if (player.state != AudioTrack.STATE_INITIALIZED) {
++                player.release()
++                error("TV audio output did not initialize")
++            }
++            player.play()
++            track = player
++            Log.i(TAG, "Phone audio output started: $sampleRate Hz, $channels channels")
++            true
++        } catch (e: Exception) {
++            Log.w(TAG, "Phone audio playback unavailable", e)
++            false
++        }
++    }
++
++    @Synchronized fun write(bytes: ByteArray) {
++        val player = track ?: return
++        try {
++            // A full TV output buffer drops the latest chunk instead of delaying video.
++            val written = player.write(bytes, 0, bytes.size, AudioTrack.WRITE_NON_BLOCKING)
++            if (written < 0) {
++                Log.w(TAG, "Phone audio output returned $written")
++                stop()
++            }
++        } catch (e: Exception) {
++            Log.w(TAG, "Phone audio playback stopped", e)
++            stop()
++        }
++    }
++
++    @Synchronized fun stop() {
++        val player = track ?: return
++        track = null
++        runCatching { player.pause() }
++        runCatching { player.flush() }
++        runCatching { player.release() }
++    }
++
++    companion object { private const val TAG = "PhoneAudioPlayer" }
++}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt
 new file mode 100644
-index 0000000..bc3c21f
+index 0000000..766725f
 --- /dev/null
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServer.kt
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,145 @@
 +package io.github.jqssun.airplay.service
 +
 +import android.util.Log
@@ -973,13 +1069,16 @@ index 0000000..bc3c21f
 +import java.net.SocketException
 +import java.util.concurrent.atomic.AtomicBoolean
 +
-+/** A small LAN transport for the companion Android sender. Video payloads are Annex B H.264. */
++/** A small LAN transport for the companion Android sender. Video is Annex B H.264; audio is PCM16. */
 +class PhoneMirrorServer(private val listener: Listener, private val port: Int = PORT) {
 +    interface Listener {
 +        fun approve(address: String): Boolean
 +        fun started(width: Int, height: Int): Boolean
 +        fun resized(width: Int, height: Int)
 +        fun frame(bytes: ByteArray, timestampNs: Long)
++        fun audioStarted(sampleRate: Int, channels: Int)
++        fun audioFrame(bytes: ByteArray, timestampNs: Long)
++        fun audioEnded()
 +        fun ended()
 +    }
 +
@@ -1027,7 +1126,8 @@ index 0000000..bc3c21f
 +            socket.use {
 +                val input = DataInputStream(it.getInputStream())
 +                val output = DataOutputStream(it.getOutputStream())
-+                if (input.readInt() != MAGIC) return
++                val magic = input.readInt()
++                if (magic != MAGIC && magic != MAGIC_WITH_AUDIO) return
 +                val width = input.readInt()
 +                val height = input.readInt()
 +                if (!validSize(width, height)) return
@@ -1044,6 +1144,7 @@ index 0000000..bc3c21f
 +                output.flush()
 +                it.soTimeout = 0
 +                it.keepAlive = true
++                var audioConfigured = false
 +                while (running) {
 +                    val length = input.readInt()
 +                    if (length == 0) {
@@ -1051,6 +1152,28 @@ index 0000000..bc3c21f
 +                        val nextHeight = input.readInt()
 +                        if (!validSize(nextWidth, nextHeight)) break
 +                        listener.resized(nextWidth, nextHeight)
++                        continue
++                    }
++                    if (length == -1 && magic == MAGIC_WITH_AUDIO) {
++                        val sampleRate = input.readInt()
++                        val channels = input.readInt()
++                        if (sampleRate !in 8_000..96_000 || channels !in 1..2) break
++                        listener.audioStarted(sampleRate, channels)
++                        audioConfigured = true
++                        continue
++                    }
++                    if (length == -2 && magic == MAGIC_WITH_AUDIO && audioConfigured) {
++                        val timestampNs = input.readLong()
++                        val audioLength = input.readInt()
++                        if (audioLength !in 1..MAX_AUDIO_BYTES || audioLength % 2 != 0) break
++                        val data = ByteArray(audioLength)
++                        input.readFully(data)
++                        listener.audioFrame(data, timestampNs)
++                        continue
++                    }
++                    if (length == -3 && magic == MAGIC_WITH_AUDIO && audioConfigured) {
++                        audioConfigured = false
++                        listener.audioEnded()
 +                        continue
 +                    }
 +                    if (length !in 1..MAX_FRAME_BYTES) break
@@ -1073,7 +1196,9 @@ index 0000000..bc3c21f
 +        private const val TAG = "PhoneMirrorServer"
 +        const val PORT = 7102
 +        const val MAGIC = 0x464D5031 // FMP1
++        const val MAGIC_WITH_AUDIO = 0x464D5032 // FMP2
 +        private const val MAX_FRAME_BYTES = 2 * 1024 * 1024
++        private const val MAX_AUDIO_BYTES = 64 * 1024
 +
 +        private fun validSize(width: Int, height: Int) =
 +            width in 64..1920 && height in 64..1920 && width.toLong() * height <= 2_073_600L
@@ -3665,10 +3790,10 @@ index 0000000..1a2be6b
 +}
 diff --git a/app/src/test/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServerTest.kt b/app/src/test/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServerTest.kt
 new file mode 100644
-index 0000000..c136b8b
+index 0000000..06bbedd
 --- /dev/null
 +++ b/app/src/test/kotlin/io/github/jqssun/airplay/service/PhoneMirrorServerTest.kt
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,123 @@
 +package io.github.jqssun.airplay.service
 +
 +import org.junit.Assert.assertArrayEquals
@@ -3702,6 +3827,9 @@ index 0000000..c136b8b
 +                }
 +                received.countDown()
 +            }
++            override fun audioStarted(sampleRate: Int, channels: Int) = Unit
++            override fun audioFrame(bytes: ByteArray, timestampNs: Long) = Unit
++            override fun audioEnded() = Unit
 +            override fun ended() = Unit
 +        }, port = 0)
 +
@@ -3728,6 +3856,61 @@ index 0000000..c136b8b
 +            synchronized(events) {
 +                assertEquals(listOf("start:432x960", "resize:960x432", "frame:123"), events)
 +                assertArrayEquals(byteArrayOf(1, 2, 3), frame)
++            }
++        } finally {
++            server.stop()
++        }
++    }
++
++    @Test fun audioAndVideoPacketsShareOneSession() {
++        val received = CountDownLatch(2)
++        val events = mutableListOf<String>()
++        val server = PhoneMirrorServer(object : PhoneMirrorServer.Listener {
++            override fun approve(address: String) = true
++            override fun started(width: Int, height: Int) = true
++            override fun resized(width: Int, height: Int) = Unit
++            override fun frame(bytes: ByteArray, timestampNs: Long) {
++                synchronized(events) { events += "video:$timestampNs:${bytes.size}" }
++                received.countDown()
++            }
++            override fun audioStarted(sampleRate: Int, channels: Int) {
++                synchronized(events) { events += "audio:$sampleRate:$channels" }
++            }
++            override fun audioFrame(bytes: ByteArray, timestampNs: Long) {
++                synchronized(events) { events += "sound:$timestampNs:${bytes.toList()}" }
++                received.countDown()
++            }
++            override fun audioEnded() {
++                synchronized(events) { events += "audio:end" }
++            }
++            override fun ended() = Unit
++        }, port = 0)
++
++        try {
++            Socket("127.0.0.1", server.start()).use { socket ->
++                val output = DataOutputStream(socket.getOutputStream())
++                val input = DataInputStream(socket.getInputStream())
++                output.writeInt(PhoneMirrorServer.MAGIC_WITH_AUDIO)
++                output.writeInt(960)
++                output.writeInt(540)
++                output.flush()
++                assertEquals(1, input.readUnsignedByte())
++                output.writeInt(-1)
++                output.writeInt(48_000)
++                output.writeInt(2)
++                output.writeInt(-2)
++                output.writeLong(321L)
++                output.writeInt(4)
++                output.write(byteArrayOf(1, 2, 3, 4))
++                output.writeInt(-3)
++                output.writeInt(2)
++                output.writeLong(123L)
++                output.write(byteArrayOf(5, 6))
++                output.flush()
++                assertTrue(received.await(3, TimeUnit.SECONDS))
++            }
++            synchronized(events) {
++                assertEquals(listOf("audio:48000:2", "sound:321:[1, 2, 3, 4]", "audio:end", "video:123:2"), events)
 +            }
 +        } finally {
 +            server.stop()

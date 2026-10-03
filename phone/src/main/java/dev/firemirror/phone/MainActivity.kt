@@ -1,8 +1,10 @@
 package dev.firemirror.phone
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -11,6 +13,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -34,11 +37,13 @@ class MainActivity : Activity() {
     private lateinit var address: EditText
     private lateinit var connect: Button
     private lateinit var stop: Button
+    private lateinit var testSound: Button
     private val handler = Handler(Looper.getMainLooper())
     private val updateStatus = object : Runnable {
         override fun run() {
             if (::status.isInitialized) status.text = ShareService.status
             if (::stop.isInitialized) stop.isEnabled = ShareService.running
+            if (::testSound.isInitialized) testSound.isEnabled = ShareService.running && ShareService.status.startsWith("Showing")
             handler.postDelayed(this, 500)
         }
     }
@@ -111,12 +116,17 @@ class MainActivity : Activity() {
             }
         }
         page.addView(stop, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+        testSound = button("Test TV sound", PANEL, Color.WHITE).apply {
+            isEnabled = false
+            setOnClickListener { TestSound.play() }
+        }
+        page.addView(testSound, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
         status = label("Waiting for a TV", 14f, MUTED, false).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(20), 0, dp(10))
         }
         page.addView(status)
-        page.addView(label("The TV will ask you to approve the connection. Android will ask before sharing your screen. Use a trusted WiFi network.", 13f, MUTED, false).apply {
+        page.addView(label("The TV will ask you to approve the connection. Android will ask to capture your screen and supported app audio. If you decline audio permission, video still works. Use a trusted WiFi network.", 13f, MUTED, false).apply {
             setPadding(0, dp(24), 0, 0)
         })
     }
@@ -130,8 +140,26 @@ class MainActivity : Activity() {
         }
         getPreferences(MODE_PRIVATE).edit().putString("tv_address", manual).apply()
         chosen = tv
+        if (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
+        } else {
+            requestScreenCapture()
+        }
+    }
+
+    private fun requestScreenCapture() {
         val projection = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         startActivityForResult(projection.createScreenCaptureIntent(), REQUEST_CAPTURE)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_AUDIO) {
+            if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
+                status.text = "Audio permission declined. Sharing video only."
+            }
+            requestScreenCapture()
+        }
     }
 
     @Deprecated("The platform result API is sufficient for this small standalone sender")
@@ -146,6 +174,8 @@ class MainActivity : Activity() {
             putExtra(ShareService.EXTRA_PORT, tv.port)
             putExtra(ShareService.EXTRA_RESULT, resultCode)
             putExtra(ShareService.EXTRA_DATA, data)
+            putExtra(ShareService.EXTRA_AUDIO_ENABLED,
+                Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         }
         startForegroundService(intent)
     }
@@ -250,6 +280,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_CAPTURE = 20
+        private const val REQUEST_AUDIO = 21
         private const val BACKGROUND = 0xFF0A1514.toInt()
         private const val PANEL = 0xFF1D302E.toInt()
         private const val SELECTED = 0xFF2F5550.toInt()
