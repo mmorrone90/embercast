@@ -15,16 +15,17 @@ internal class PhoneMediaVolume(context: Context) {
         val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
         if (current == 0) return true
         // Persist first so a restarted app can restore the phone after a crash.
-        if (!saved.edit().putInt(PREVIOUS_VOLUME, current).commit()) return false
+        val alreadySaved = saved.contains(PREVIOUS_VOLUME)
+        if (!alreadySaved && !saved.edit().putInt(PREVIOUS_VOLUME, current).commit()) return false
         return try {
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
             if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) true
             else {
-                saved.edit().remove(PREVIOUS_VOLUME).apply()
+                if (!alreadySaved) saved.edit().remove(PREVIOUS_VOLUME).apply()
                 false
             }
         } catch (e: SecurityException) {
-            saved.edit().remove(PREVIOUS_VOLUME).apply()
+            if (!alreadySaved) saved.edit().remove(PREVIOUS_VOLUME).apply()
             Log.w(TAG, "Could not silence phone media", e)
             false
         }

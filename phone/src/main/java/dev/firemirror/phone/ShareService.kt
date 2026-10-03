@@ -25,6 +25,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Surface
@@ -227,6 +228,7 @@ class ShareService : Service() {
     private fun sendAudio(record: AudioRecord, output: DataOutputStream) {
         val chunk = ByteArray(PhoneMirrorPackets.AUDIO_CHUNK_BYTES)
         var signalSeen = false
+        var lastMuteCheck = 0L
         try {
             while (sharing.get()) {
                 val count = record.read(chunk, 0, chunk.size, AudioRecord.READ_BLOCKING)
@@ -234,6 +236,15 @@ class ShareService : Service() {
                 if (count < 0) {
                     Log.w(TAG, "Audio capture stopped: $count")
                     break
+                }
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastMuteCheck >= 500) {
+                    val muted = phoneMediaVolume.mute()
+                    if (muted != phoneMuted) {
+                        phoneMuted = muted
+                        status = sharingStatus()
+                    }
+                    lastMuteCheck = now
                 }
                 if (!signalSeen && (0 until count).any { chunk[it] != 0.toByte() }) {
                     signalSeen = true

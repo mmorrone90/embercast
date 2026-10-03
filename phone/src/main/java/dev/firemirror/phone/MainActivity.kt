@@ -82,6 +82,9 @@ class MainActivity : Activity() {
         page.addView(label("Your phone.\nOn the big screen.", 34f, Color.WHITE, true).apply {
             setPadding(0, dp(20), 0, dp(10))
         })
+        @Suppress("DEPRECATION")
+        val version = packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
+        page.addView(label("FireMirror Phone $version", 13f, MUTED, false))
         page.addView(label("Find your Fire TV on the same WiFi, then share your screen.", 16f, MUTED, false))
 
         page.addView(label("NEARBY FIRE TV", 12f, ACCENT, true).apply {
@@ -127,7 +130,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(20), 0, dp(10))
         }
         page.addView(status)
-        page.addView(label("The TV will ask you to approve the connection. Android will ask to capture your screen and supported app audio. While sharing app sound, your phone's media speaker is muted and its previous volume is restored when you stop. If you decline audio permission, video still works. Use a trusted WiFi network.", 13f, MUTED, false).apply {
+        page.addView(label("The TV will ask you to approve the connection. Android will ask to capture your screen and supported app audio. While sharing app sound, your phone's media speaker is muted and its previous volume is restored when you stop. Some video apps block screen capture; if their picture is black on the TV, use their Fire TV app. Use a trusted WiFi network.", 13f, MUTED, false).apply {
             setPadding(0, dp(24), 0, 0)
         })
     }
