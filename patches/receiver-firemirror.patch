@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index 2604452..e67abfb 100644
+index 2604452..6681e9c 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
 @@ -31,11 +31,11 @@ android {
@@ -12,8 +12,8 @@ index 2604452..e67abfb 100644
          targetSdk = 36
 -        versionCode = 31
 -        versionName = "0.0.31"
-+        versionCode = 11
-+        versionName = "0.6.0"
++        versionCode = 12
++        versionName = "0.7.0"
  
          externalNativeBuild {
              cmake {
@@ -26,18 +26,17 @@ index 2604452..e67abfb 100644
      implementation(libs.androidx.activity.compose)
      implementation(libs.androidx.lifecycle.runtime)
 diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
-index f42c86f..5ec59f4 100644
+index f42c86f..e59fdb8 100644
 --- a/app/src/main/AndroidManifest.xml
 +++ b/app/src/main/AndroidManifest.xml
-@@ -25,15 +25,17 @@
+@@ -25,15 +25,15 @@
          android:name=".AirPlayApp"
          android:allowBackup="false"
          android:usesCleartextTraffic="true"
 -        android:icon="@mipmap/ic_launcher"
 -        android:roundIcon="@mipmap/ic_launcher_round"
 -        android:banner="@drawable/banner"
-+        android:icon="@drawable/firemirror_banner"
-+        android:roundIcon="@drawable/firemirror_banner"
++        android:icon="@drawable/firemirror_square_icon"
 +        android:banner="@drawable/firemirror_banner"
          android:label="@string/app_name"
          android:supportsRtl="true"
@@ -45,16 +44,15 @@ index f42c86f..5ec59f4 100644
  
          <activity
              android:name=".MainActivity"
-+            android:icon="@drawable/firemirror_banner"
 +            android:banner="@drawable/firemirror_banner"
              android:exported="true"
              android:supportsPictureInPicture="true"
              android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
 diff --git a/app/src/main/cpp/android_raop_callbacks.c b/app/src/main/cpp/android_raop_callbacks.c
-index 3b3b618..314ec1a 100644
+index 3b3b618..9d21671 100644
 --- a/app/src/main/cpp/android_raop_callbacks.c
 +++ b/app/src/main/cpp/android_raop_callbacks.c
-@@ -56,6 +56,7 @@ void android_callbacks_init(android_callback_ctx_t *ctx, JNIEnv *env, jobject ca
+@@ -56,11 +56,14 @@ void android_callbacks_init(android_callback_ctx_t *ctx, JNIEnv *env, jobject ca
      ctx->on_client_volume = (*env)->GetMethodID(env, cls, "onClientVolume", "()F");
      ctx->on_audio_teardown = (*env)->GetMethodID(env, cls, "onAudioTeardown", "()V");
      ctx->on_conn_init = (*env)->GetMethodID(env, cls, "onConnectionInit", "()V");
@@ -62,7 +60,14 @@ index 3b3b618..314ec1a 100644
      ctx->on_conn_destroy = (*env)->GetMethodID(env, cls, "onConnectionDestroy", "()V");
      ctx->on_conn_reset = (*env)->GetMethodID(env, cls, "onConnectionReset", "(I)V");
      ctx->on_display_pin = (*env)->GetMethodID(env, cls, "onDisplayPin", "(Ljava/lang/String;)V");
-@@ -142,6 +143,22 @@ static void _conn_init(void *cls) {
+     ctx->on_metadata = (*env)->GetMethodID(env, cls, "onMetadata", "([B)V");
+     ctx->on_coverart = (*env)->GetMethodID(env, cls, "onCoverArt", "([B)V");
++    ctx->on_photo = (*env)->GetMethodID(env, cls, "onPhoto", "([B)V");
++    ctx->on_photo_cleared = (*env)->GetMethodID(env, cls, "onPhotoCleared", "()V");
+     ctx->on_progress = (*env)->GetMethodID(env, cls, "onProgress", "(JJJ)V");
+     ctx->on_dacp_id = (*env)->GetMethodID(env, cls, "onDacpId", "(Ljava/lang/String;Ljava/lang/String;)V");
+     ctx->on_mirror_running = (*env)->GetMethodID(env, cls, "onMirrorRunning", "(Z)V");
+@@ -142,6 +145,22 @@ static void _conn_init(void *cls) {
      (*env)->CallVoidMethod(env, ctx->callback_obj, ctx->on_conn_init);
  }
  
@@ -85,7 +90,31 @@ index 3b3b618..314ec1a 100644
  static void _conn_destroy(void *cls) {
      android_callback_ctx_t *ctx = (android_callback_ctx_t *)cls;
      JNIEnv *env = _get_env(ctx);
-@@ -395,6 +412,7 @@ void android_callbacks_fill(raop_callbacks_t *cbs, android_callback_ctx_t *ctx)
+@@ -254,6 +273,23 @@ static void _audio_set_coverart(void *cls, const void *buf, int len) {
+     (*env)->DeleteLocalRef(env, arr);
+ }
+ 
++static void _photo_process(void *cls, const void *buf, int len) {
++    android_callback_ctx_t *ctx = (android_callback_ctx_t *)cls;
++    JNIEnv *env = _get_env(ctx);
++    if (!env || !buf || len <= 0) return;
++    jbyteArray arr = (*env)->NewByteArray(env, len);
++    (*env)->SetByteArrayRegion(env, arr, 0, len, (jbyte *)buf);
++    (*env)->CallVoidMethod(env, ctx->callback_obj, ctx->on_photo, arr);
++    (*env)->DeleteLocalRef(env, arr);
++}
++
++static void _photo_clear(void *cls) {
++    android_callback_ctx_t *ctx = (android_callback_ctx_t *)cls;
++    JNIEnv *env = _get_env(ctx);
++    if (!env) return;
++    (*env)->CallVoidMethod(env, ctx->callback_obj, ctx->on_photo_cleared);
++}
++
+ static void _audio_remote_control_id(void *cls, const char *dacp_id, const char *active_remote) {
+     android_callback_ctx_t *ctx = (android_callback_ctx_t *)cls;
+     JNIEnv *env = _get_env(ctx);
+@@ -395,6 +431,7 @@ void android_callbacks_fill(raop_callbacks_t *cbs, android_callback_ctx_t *ctx)
      cbs->conn_reset = _conn_reset;
      cbs->video_reset = _video_reset;
      cbs->conn_init = _conn_init;
@@ -93,11 +122,20 @@ index 3b3b618..314ec1a 100644
      cbs->conn_destroy = _conn_destroy;
      cbs->audio_flush = _audio_flush;
      cbs->video_flush = _video_flush;
+@@ -402,6 +439,8 @@ void android_callbacks_fill(raop_callbacks_t *cbs, android_callback_ctx_t *ctx)
+     cbs->audio_set_volume = _audio_set_volume;
+     cbs->audio_set_metadata = _audio_set_metadata;
+     cbs->audio_set_coverart = _audio_set_coverart;
++    cbs->photo_process = _photo_process;
++    cbs->photo_clear = _photo_clear;
+     cbs->audio_stop_coverart_rendering = _audio_stop_coverart_rendering;
+     cbs->audio_remote_control_id = _audio_remote_control_id;
+     cbs->audio_set_progress = _audio_set_progress;
 diff --git a/app/src/main/cpp/android_raop_callbacks.h b/app/src/main/cpp/android_raop_callbacks.h
-index 43e9908..a014101 100644
+index 43e9908..e381185 100644
 --- a/app/src/main/cpp/android_raop_callbacks.h
 +++ b/app/src/main/cpp/android_raop_callbacks.h
-@@ -21,6 +21,7 @@ typedef struct {
+@@ -21,11 +21,14 @@ typedef struct {
      jmethodID on_client_volume;
      jmethodID on_audio_teardown;
      jmethodID on_conn_init;
@@ -105,6 +143,13 @@ index 43e9908..a014101 100644
      jmethodID on_conn_destroy;
      jmethodID on_conn_reset;
      jmethodID on_display_pin;
+     jmethodID on_metadata;
+     jmethodID on_coverart;
++    jmethodID on_photo;
++    jmethodID on_photo_cleared;
+     jmethodID on_progress;
+     jmethodID on_dacp_id;
+     jmethodID on_mirror_running;
 diff --git a/app/src/main/cpp/patches/UxPlay/0007-require-connection-approval.patch b/app/src/main/cpp/patches/UxPlay/0007-require-connection-approval.patch
 new file mode 100644
 index 0000000..f496418
@@ -139,6 +184,83 @@ index 0000000..f496418
 + 
 +     conn = calloc(1, sizeof(raop_conn_t));
 +     if (!conn) {
+diff --git a/app/src/main/cpp/patches/UxPlay/0008-support-airplay-photos.patch b/app/src/main/cpp/patches/UxPlay/0008-support-airplay-photos.patch
+new file mode 100644
+index 0000000..4eb4fde
+--- /dev/null
++++ b/app/src/main/cpp/patches/UxPlay/0008-support-airplay-photos.patch
+@@ -0,0 +1,71 @@
++diff --git a/lib/http_handlers.h b/lib/http_handlers.h
++index 7123c96..41616bc 100644
++--- a/lib/http_handlers.h
+++++ b/lib/http_handlers.h
++@@ -156,6 +156,32 @@ http_handler_stop(raop_conn_t *conn, http_request_t *request, http_response_t *r
++     raop->callbacks.on_video_stop(raop->callbacks.cls);
++ }
++ 
+++/* AirPlay still-photo endpoint used by iPhone and iPad Photos. */
+++static void
+++http_handler_photo(raop_conn_t *conn, http_request_t *request, http_response_t *response,
+++                   char **response_data, int *response_datalen) {
+++    const char *method = http_request_get_method(request);
+++    if (!strcmp(method, "PUT")) {
+++        int datalen = 0;
+++        const char *data = http_request_get_data(request, &datalen);
+++        if (!data || datalen <= 0 || datalen > 25 * 1024 * 1024) {
+++            http_response_init(response, "HTTP/1.1", 400, "Bad Request");
+++            return;
+++        }
+++        if (conn->raop->callbacks.photo_process) {
+++            conn->raop->callbacks.photo_process(conn->raop->callbacks.cls, data, datalen);
+++        }
+++    } else if (!strcmp(method, "DELETE")) {
+++        if (conn->raop->callbacks.photo_clear) {
+++            conn->raop->callbacks.photo_clear(conn->raop->callbacks.cls);
+++        }
+++    } else {
+++        http_response_init(response, "HTTP/1.1", 405, "Method Not Allowed");
+++    }
+++    (void)response_data;
+++    (void)response_datalen;
+++}
+++
++ /* handles PUT /setProperty http requests from Client to Server */
++ 
++ static void
++diff --git a/lib/raop.c b/lib/raop.c
++index 5936f43..ca43b6c 100644
++--- a/lib/raop.c
+++++ b/lib/raop.c
++@@ -477,9 +477,15 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
++                 handler = &http_handler_playback_info;
++             }
++         } else if (!strcmp(method, "PUT")) {
++-            if (!strncmp (url, "/setProperty?", strlen("/setProperty?"))) {
+++            if (!strcmp(url, "/photo")) {
+++                handler = &http_handler_photo;
+++            } else if (!strncmp (url, "/setProperty?", strlen("/setProperty?"))) {
++                 handler = &http_handler_set_property;
++             }
+++        } else if (!strcmp(method, "DELETE")) {
+++            if (!strcmp(url, "/photo")) {
+++                handler = &http_handler_photo;
+++            }
++         }
++     } else if (hls_request) {
++         handler = &http_handler_hls;
++diff --git a/lib/raop.h b/lib/raop.h
++index 02aa12b..5c375c8 100644
++--- a/lib/raop.h
+++++ b/lib/raop.h
++@@ -93,6 +93,8 @@ struct raop_callbacks_s {
++     void  (*audio_set_metadata)(void *cls, const void *buffer, int buflen);
++     void  (*audio_set_coverart)(void *cls, const void *buffer, int buflen);
++     void  (*audio_stop_coverart_rendering) (void* cls);
+++    void  (*photo_process)(void *cls, const void *buffer, int buflen);
+++    void  (*photo_clear)(void *cls);
++     void  (*audio_remote_control_id)(void *cls, const char *dacp_id, const char *active_remote_header);
++     void  (*audio_set_progress)(void *cls, uint32_t *start, uint32_t *curr, uint32_t *end);
++     void  (*audio_get_format)(void *cls, unsigned char *ct, unsigned short *spf, bool *usingScreen, bool *isMedia, uint64_t *audioFormat);
 diff --git a/app/src/main/cpp/third_party/UxPlay b/app/src/main/cpp/third_party/UxPlay
 --- a/app/src/main/cpp/third_party/UxPlay
 +++ b/app/src/main/cpp/third_party/UxPlay
@@ -310,10 +432,10 @@ index f4a643e..ced6e67 100644
      const val LAUNCH_ON_CONNECT = "launch_on_connect"; const val DEF_LAUNCH_ON_CONNECT = true
  }
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt b/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt
-index 8732267..dce4d81 100644
+index 8732267..3638ee8 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/bridge/RaopCallbackHandler.kt
-@@ -8,6 +8,7 @@ interface RaopCallbackHandler {
+@@ -8,11 +8,14 @@ interface RaopCallbackHandler {
      fun onClientVolume(): Float
      fun onAudioTeardown()
      fun onConnectionInit()
@@ -321,6 +443,13 @@ index 8732267..dce4d81 100644
      fun onConnectionDestroy()
      fun onConnectionReset(reason: Int)
      fun onDisplayPin(pin: String)
+     fun onMetadata(data: ByteArray)
+     fun onCoverArt(data: ByteArray)
++    fun onPhoto(data: ByteArray)
++    fun onPhotoCleared()
+     fun onProgress(start: Long, curr: Long, end: Long)
+     fun onDacpId(dacpId: String, activeRemote: String)
+     fun onMirrorRunning(running: Boolean)
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/capture/CaptureTransferServer.kt
 new file mode 100644
 index 0000000..7c2d214
@@ -542,21 +671,105 @@ index 0000000..7bcc06c
 +    }
 +}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt b/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt
-index 471193f..766312e 100644
+index 471193f..5c176fb 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/discovery/NsdServiceManager.kt
-@@ -12,6 +12,7 @@ class NsdServiceManager(private val ctx: Context) {
+@@ -6,12 +6,40 @@ import android.net.nsd.NsdServiceInfo
+ import android.net.wifi.WifiManager
+ import android.util.Log
+ 
+-class NsdServiceManager(private val ctx: Context) {
++class NsdServiceManager(
++    private val ctx: Context,
++    private val onStatus: (Status) -> Unit = {}
++) {
++
++    enum class State { IDLE, REGISTERING, ADVERTISING, ERROR }
++
++    data class Status(
++        val state: State,
++        val advertisedName: String? = null,
++        val detail: String? = null
++    )
+ 
+     private val nsdManager = ctx.getSystemService(Context.NSD_SERVICE) as NsdManager
      private var multicastLock: WifiManager.MulticastLock? = null
      private var raopRegistration: NsdManager.RegistrationListener? = null
      private var airplayRegistration: NsdManager.RegistrationListener? = null
 +    private var phoneRegistration: NsdManager.RegistrationListener? = null
++    private val registrationQueue = ArrayDeque<() -> Unit>()
++    private var registrationInFlight = false
++    private var requireRaop = false
++    private var requireAirplay = false
++    private var raopReady = false
++    private var airplayReady = false
++    private var actualAirplayName: String? = null
++
++    fun configureAirPlayServices(requireRaop: Boolean, requireAirplay: Boolean) {
++        this.requireRaop = requireRaop
++        this.requireAirplay = requireAirplay
++        raopReady = !requireRaop
++        airplayReady = !requireAirplay
++        actualAirplayName = null
++        onStatus(Status(State.REGISTERING, detail = "Publishing receiver on the local network"))
++    }
  
      fun acquireMulticastLock() {
          val wifi = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-@@ -71,6 +72,30 @@ class NsdServiceManager(private val ctx: Context) {
-         nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, airplayRegistration)
+@@ -29,12 +57,15 @@ class NsdServiceManager(private val ctx: Context) {
+             txtRecords.forEach { (k, v) -> setAttribute(k, v) }
+         }
+ 
+-        raopRegistration = object : NsdManager.RegistrationListener {
++        val listener = object : NsdManager.RegistrationListener {
+             override fun onServiceRegistered(info: NsdServiceInfo) {
+                 Log.i(TAG, "RAOP registered: ${info.serviceName}")
++                raopReady = true
++                registrationFinished()
+             }
+             override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
+                 Log.e(TAG, "RAOP registration failed: $code")
++                registrationFailed("AirPlay audio discovery failed ($code)")
+             }
+             override fun onServiceUnregistered(info: NsdServiceInfo) {
+                 Log.i(TAG, "RAOP unregistered")
+@@ -43,7 +74,8 @@ class NsdServiceManager(private val ctx: Context) {
+                 Log.e(TAG, "RAOP unregister failed: $code")
+             }
+         }
+-        nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, raopRegistration)
++        raopRegistration = listener
++        enqueueRegistration { nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener) }
      }
  
+     fun registerAirplay(serviceName: String, port: Int, txtRecords: Map<String, String>) {
+@@ -54,12 +86,16 @@ class NsdServiceManager(private val ctx: Context) {
+             txtRecords.forEach { (k, v) -> setAttribute(k, v) }
+         }
+ 
+-        airplayRegistration = object : NsdManager.RegistrationListener {
++        val listener = object : NsdManager.RegistrationListener {
+             override fun onServiceRegistered(info: NsdServiceInfo) {
+                 Log.i(TAG, "AirPlay registered: ${info.serviceName}")
++                airplayReady = true
++                actualAirplayName = info.serviceName
++                registrationFinished()
+             }
+             override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
+                 Log.e(TAG, "AirPlay registration failed: $code")
++                registrationFailed("Screen Mirroring discovery failed ($code)")
+             }
+             override fun onServiceUnregistered(info: NsdServiceInfo) {
+                 Log.i(TAG, "AirPlay unregistered")
+@@ -68,10 +104,78 @@ class NsdServiceManager(private val ctx: Context) {
+                 Log.e(TAG, "AirPlay unregister failed: $code")
+             }
+         }
+-        nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, airplayRegistration)
++        airplayRegistration = listener
++        enqueueRegistration { nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener) }
++    }
++
 +    fun registerPhoneMirror(serviceName: String, port: Int) {
 +        val info = NsdServiceInfo().apply {
 +            this.serviceName = serviceName
@@ -564,12 +777,14 @@ index 471193f..766312e 100644
 +            this.port = port
 +            setAttribute("version", "1")
 +        }
-+        phoneRegistration = object : NsdManager.RegistrationListener {
++        val listener = object : NsdManager.RegistrationListener {
 +            override fun onServiceRegistered(info: NsdServiceInfo) {
 +                Log.i(TAG, "Phone receiver registered: ${info.serviceName}")
++                registrationFinished()
 +            }
 +            override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
 +                Log.e(TAG, "Phone receiver registration failed: $code")
++                registrationFailed("Android phone discovery failed ($code)", airPlayStillAvailable = true)
 +            }
 +            override fun onServiceUnregistered(info: NsdServiceInfo) {
 +                Log.i(TAG, "Phone receiver unregistered")
@@ -578,13 +793,55 @@ index 471193f..766312e 100644
 +                Log.e(TAG, "Phone receiver unregister failed: $code")
 +            }
 +        }
-+        nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, phoneRegistration)
++        phoneRegistration = listener
++        enqueueRegistration { nsdManager.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener) }
 +    }
 +
++    private fun enqueueRegistration(block: () -> Unit) {
++        registrationQueue.addLast(block)
++        startNextRegistration()
++    }
++
++    private fun startNextRegistration() {
++        if (registrationInFlight || registrationQueue.isEmpty()) return
++        registrationInFlight = true
++        try {
++            registrationQueue.removeFirst().invoke()
++        } catch (e: Exception) {
++            Log.e(TAG, "Service registration could not start", e)
++            registrationFailed("Network discovery could not start")
++        }
++    }
++
++    private fun registrationFinished() {
++        registrationInFlight = false
++        publishReadyStatusIfComplete()
++        startNextRegistration()
++    }
++
++    private fun registrationFailed(detail: String, airPlayStillAvailable: Boolean = false) {
++        registrationInFlight = false
++        if (!airPlayStillAvailable || !(raopReady && airplayReady)) {
++            onStatus(Status(State.ERROR, actualAirplayName, detail))
++        } else {
++            publishReadyStatusIfComplete()
++        }
++        startNextRegistration()
++    }
++
++    private fun publishReadyStatusIfComplete() {
++        if (raopReady && airplayReady && (requireRaop || requireAirplay)) {
++            onStatus(Status(State.ADVERTISING, actualAirplayName))
++        }
+     }
+ 
      fun unregisterAll() {
++        registrationQueue.clear()
++        registrationInFlight = false
          raopRegistration?.let {
              try { nsdManager.unregisterService(it) } catch (_: Exception) {}
-@@ -80,6 +105,10 @@ class NsdServiceManager(private val ctx: Context) {
+             raopRegistration = null
+@@ -80,6 +184,14 @@ class NsdServiceManager(private val ctx: Context) {
              try { nsdManager.unregisterService(it) } catch (_: Exception) {}
              airplayRegistration = null
          }
@@ -592,24 +849,39 @@ index 471193f..766312e 100644
 +            try { nsdManager.unregisterService(it) } catch (_: Exception) {}
 +            phoneRegistration = null
 +        }
++        raopReady = false
++        airplayReady = false
++        actualAirplayName = null
++        onStatus(Status(State.IDLE))
      }
  
      fun release() {
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
-index 9390300..eeaf23c 100644
+index 9390300..a9ccedb 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt
-@@ -13,6 +13,9 @@ import android.content.pm.ServiceInfo
+@@ -11,8 +11,12 @@ import android.content.IntentFilter
+ import android.content.SharedPreferences
+ import android.content.pm.ServiceInfo
  import android.content.res.Configuration
- import android.graphics.BitmapFactory
+-import android.graphics.BitmapFactory
  import android.media.AudioManager
++import android.graphics.Bitmap
++import android.graphics.BitmapFactory
 +import android.net.ConnectivityManager
 +import android.net.Network
 +import android.net.LinkProperties
  import android.os.Binder
  import android.os.Build
  import android.os.Handler
-@@ -50,7 +53,10 @@ import io.github.jqssun.airplay.renderer.AudioRenderer
+@@ -44,13 +48,17 @@ import io.github.jqssun.airplay.bridge.LogListener
+ import io.github.jqssun.airplay.bridge.NativeBridge
+ import io.github.jqssun.airplay.bridge.RaopCallbackHandler
+ import io.github.jqssun.airplay.discovery.NsdServiceManager
++import io.github.jqssun.airplay.discovery.NsdServiceManager.State as DiscoveryState
+ import io.github.jqssun.airplay.download.VideoDownloader
+ import io.github.jqssun.airplay.renderer.AirPlayVideoPlayer
+ import io.github.jqssun.airplay.renderer.AudioRenderer
  import io.github.jqssun.airplay.renderer.VideoRenderer
  import io.github.jqssun.airplay.viewmodel.DebugInfo
  import java.net.NetworkInterface
@@ -620,7 +892,7 @@ index 9390300..eeaf23c 100644
  import kotlin.math.abs
  import kotlin.math.roundToInt
  import kotlinx.coroutines.flow.MutableStateFlow
-@@ -71,6 +77,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -71,6 +79,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
  
      private var nativeHandle = 0L
      private var nsdManager: NsdServiceManager? = null
@@ -630,7 +902,7 @@ index 9390300..eeaf23c 100644
      private var wakeLock: PowerManager.WakeLock? = null
      private var foregroundStarted = false
      private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
-@@ -94,6 +103,64 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -94,6 +105,70 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      private val _connectionCount = MutableStateFlow(0)
      val connectionCount = _connectionCount.asStateFlow()
  
@@ -650,6 +922,12 @@ index 9390300..eeaf23c 100644
 +    val networkAddress = _networkAddress.asStateFlow()
 +    private val _connectionEvent = MutableStateFlow("Waiting for a connection")
 +    val connectionEvent = _connectionEvent.asStateFlow()
++    private val _discoveryState = MutableStateFlow(DiscoveryState.IDLE)
++    val discoveryState = _discoveryState.asStateFlow()
++    private val _advertisedName = MutableStateFlow<String?>(null)
++    val advertisedName = _advertisedName.asStateFlow()
++    private val _photo = MutableStateFlow<Bitmap?>(null)
++    val photo = _photo.asStateFlow()
 +    private val _audioActive = MutableStateFlow(false)
 +    val audioActive = _audioActive.asStateFlow()
 +    private var desiredRunning = false
@@ -695,7 +973,7 @@ index 9390300..eeaf23c 100644
      private val _videoAspect = MutableStateFlow(16f / 9f)
      val videoAspect = _videoAspect.asStateFlow()
  
-@@ -207,6 +274,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -207,6 +282,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
  
      override fun onCreate() {
          super.onCreate()
@@ -707,7 +985,7 @@ index 9390300..eeaf23c 100644
          createNotificationChannel()
          dacpController = DacpController(this)
          dacpPlayer = DacpPlayer(
-@@ -343,8 +415,18 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -343,14 +423,41 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          startServer(name, ensureServiceStarted = true)
      }
  
@@ -726,8 +1004,37 @@ index 9390300..eeaf23c 100644
          val effectiveName = name.ifBlank { Prefs.DEF_SERVER_NAME }
  
          val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-@@ -428,9 +510,81 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
-         if (prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO)) {
+         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "airplay:server").apply { acquire() }
+ 
+-        nsdManager = NsdServiceManager(this).apply { acquireMulticastLock() }
++        nsdManager = NsdServiceManager(this) { status ->
++            _discoveryState.value = status.state
++            status.advertisedName?.let { _advertisedName.value = it }
++            when (status.state) {
++                DiscoveryState.REGISTERING ->
++                    _connectionEvent.value = status.detail ?: "Publishing FireMirror on the local network"
++                DiscoveryState.ADVERTISING -> {
++                    val visibleName = status.advertisedName ?: effectiveName
++                    _advertisedName.value = visibleName
++                    if (_connectionCount.value == 0) {
++                        _connectionEvent.value = "Visible as $visibleName in Screen Mirroring"
++                    }
++                }
++                DiscoveryState.ERROR ->
++                    _connectionEvent.value = status.detail ?: "Receiver started, but network discovery failed"
++                DiscoveryState.IDLE -> Unit
++            }
++        }.apply { acquireMulticastLock() }
+ 
+         val hwAddr = getHwAddr()
+         val keyFile = filesDir.resolve("airplay.pem").absolutePath
+@@ -425,12 +532,87 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         val raopName = NativeBridge.nativeGetRaopServiceName(nativeHandle) ?: "AirPlay"
+         val resolvedName = NativeBridge.nativeGetServerName(nativeHandle) ?: effectiveName
+ 
+-        if (prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO)) {
++        nsdManager?.configureAirPlayServices(advertiseAudio, !prefs.getBoolean(Prefs.AUDIO_ONLY_MODE, Prefs.DEF_AUDIO_ONLY_MODE))
++        if (advertiseAudio) {
              nsdManager?.registerRaop(raopName, port, raopTxt)
          }
 -        nsdManager?.registerAirplay(resolvedName, port, airplayTxt)
@@ -805,11 +1112,13 @@ index 9390300..eeaf23c 100644
 +        }
  
          _serverState.value = ServerState.RUNNING
-+        _connectionEvent.value = "Receiver ready on port $port"
++        if (_discoveryState.value == DiscoveryState.IDLE) {
++            _connectionEvent.value = "Receiver ready on port $port"
++        }
          if (ensureServiceStarted) {
              ContextCompat.startForegroundService(this, Intent(this, AirPlayService::class.java))
          }
-@@ -482,13 +636,21 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -482,13 +664,21 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          wakeLock?.release()
          wakeLock = null
          _serverState.value = ServerState.ERROR
@@ -832,9 +1141,13 @@ index 9390300..eeaf23c 100644
          audioRenderer.detachEngine()
          if (nativeHandle != 0L) {
              NativeBridge.nativeStop(nativeHandle)
-@@ -515,10 +677,11 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -514,11 +704,15 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         _positionMs.value = 0
          _durationMs.value = 0
          _serverState.value = ServerState.STOPPED
++        _discoveryState.value = DiscoveryState.IDLE
++        _advertisedName.value = null
++        _photo.value = null
          _connectionCount.value = 0
 +        _audioActive.value = false
          _refreshDacpPlayer()
@@ -845,7 +1158,7 @@ index 9390300..eeaf23c 100644
          log("Server stopped")
      }
  
-@@ -579,6 +742,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -579,6 +773,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      }
  
      override fun onDestroy() {
@@ -854,7 +1167,15 @@ index 9390300..eeaf23c 100644
          stopServer()
          dacpPlayer.release()
          mediaReceiver?.let {
-@@ -635,6 +800,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -607,6 +803,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     }
+ 
+     override fun onVideoPlay(location: String, startPositionSeconds: Float) {
++        _photo.value = null
+         _videoLocation.value = location
+         _videoPlaySeq.value++
+         _videoPollSuppressed = false
+@@ -635,6 +832,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          clearPin()
          audioRenderer.start()
          audioRenderer.setFormat(ct, spf)
@@ -862,7 +1183,7 @@ index 9390300..eeaf23c 100644
          if (!usingScreen) _setPlaying(true)
          if (!usingScreen && !_audioOnly.value) {
              // pure music streaming (not screen mirroring audio)
-@@ -713,6 +879,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -713,6 +911,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      override fun onConnectionInit() {
          val firstConnection = _connectionCount.value == 0
          _connectionCount.value++
@@ -870,7 +1191,7 @@ index 9390300..eeaf23c 100644
          log("Client connected (${_connectionCount.value})")
          if (!firstConnection) return
          // conn_init is only a tcp pre-auth signal. pin-required sessions must wait for
-@@ -722,6 +889,78 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -722,6 +921,78 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
          launchMainActivity()
      }
  
@@ -949,7 +1270,7 @@ index 9390300..eeaf23c 100644
      override fun onConnectionDestroy() {
          _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
          if (_connectionCount.value == 0) {
-@@ -729,6 +968,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -729,10 +1000,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
              _endVideoPlayback("AirPlay Video stopped (disconnect)")
              // last client gone: release audio output devices to save power
              audioRenderer.stop()
@@ -957,7 +1278,12 @@ index 9390300..eeaf23c 100644
              _audioOnly.value = false
              _lastVideoPollAt = 0
              _videoPollSuppressed = false
-@@ -750,10 +990,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+             _coverArtBytes = null
++            _photo.value = null
+             _trackInfo.value = TrackInfo()
+             _positionMs.value = 0
+             _durationMs.value = 0
+@@ -750,10 +1023,12 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
              _updateMediaNotification()
          }
          log("Client disconnected (${_connectionCount.value})")
@@ -970,7 +1296,47 @@ index 9390300..eeaf23c 100644
      }
  
      override fun onDisplayPin(pin: String) {
-@@ -798,6 +1040,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+@@ -782,6 +1057,39 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+         _refreshDacpPlayer()
+     }
+ 
++    override fun onPhoto(data: ByteArray) {
++        if (data.isEmpty() || data.size > MAX_PHOTO_BYTES) {
++            log("Ignoring invalid AirPlay photo payload (${data.size} bytes)")
++            return
++        }
++        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
++        BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
++        if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
++            bounds.outWidth.toLong() * bounds.outHeight.toLong() > MAX_PHOTO_PIXELS) {
++            log("Ignoring unsupported AirPlay photo dimensions ${bounds.outWidth}x${bounds.outHeight}")
++            return
++        }
++        var sampleSize = 1
++        while (bounds.outWidth / sampleSize > MAX_PHOTO_EDGE ||
++            bounds.outHeight / sampleSize > MAX_PHOTO_EDGE) {
++            sampleSize *= 2
++        }
++        val bitmap = BitmapFactory.decodeByteArray(
++            data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sampleSize }
++        ) ?: run {
++            log("AirPlay photo could not be decoded")
++            return
++        }
++        _photo.value = bitmap
++        _connectionEvent.value = "Showing a photo from AirPlay"
++        launchMainActivity()
++    }
++
++    override fun onPhotoCleared() {
++        _photo.value = null
++        if (_connectionCount.value > 0) _connectionEvent.value = "Sender connected"
++    }
++
+     override fun onProgress(start: Long, curr: Long, end: Long) {
+         val rate = 44100.0
+         val posMs = ((curr - start) / rate * 1000).toLong().coerceAtLeast(0)
+@@ -798,6 +1106,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
      }
  
      override fun onAudioTeardown() {
@@ -978,6 +1344,28 @@ index 9390300..eeaf23c 100644
          _setPlaying(false)
      }
  
+@@ -807,7 +1116,10 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     }
+ 
+     override fun onMirrorRunning(running: Boolean) {
+-        if (running) videoRenderer.startSession() else {
++        if (running) {
++            _photo.value = null
++            videoRenderer.startSession()
++        } else {
+             videoRenderer.stopSession()
+             _mirroringActive.value = false
+         }
+@@ -1104,6 +1416,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
+     }
+ 
+     companion object {
++        private const val MAX_PHOTO_BYTES = 25 * 1024 * 1024
++        private const val MAX_PHOTO_PIXELS = 40_000_000L
++        private const val MAX_PHOTO_EDGE = 3840
+         private const val TAG = "AirPlayService"
+         private const val VOL_SYNC_EPS = 0.033f
+         private const val VOL_SYNC_MAX_STEPS = 32
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneAudioPlayer.kt b/app/src/main/kotlin/io/github/jqssun/airplay/service/PhoneAudioPlayer.kt
 new file mode 100644
 index 0000000..1a56a23
@@ -1448,10 +1836,10 @@ index 0000000..c9eb9f6
 +}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
 new file mode 100644
-index 0000000..aeb6fe9
+index 0000000..5e2c923
 --- /dev/null
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/HealthScreen.kt
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,99 @@
 +package io.github.jqssun.airplay.ui
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -1486,6 +1874,8 @@ index 0000000..aeb6fe9
 +    val mirroring by viewModel.mirroringActive.collectAsState()
 +    val audio by viewModel.audioActive.collectAsState()
 +    val event by viewModel.connectionEvent.collectAsState()
++    val discovery by viewModel.discoveryState.collectAsState()
++    val advertisedName by viewModel.advertisedName.collectAsState()
 +    val debug by viewModel.debugInfo.collectAsState()
 +    val delay by viewModel.audioLatencyMs.collectAsState()
 +    var audioTestMessage by remember { mutableStateOf<String?>(null) }
@@ -1516,6 +1906,8 @@ index 0000000..aeb6fe9
 +        audioTestMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 +        HorizontalDivider()
 +        HealthRow("Receiver", server.name.lowercase().replaceFirstChar { it.uppercase() })
++        HealthRow("AirPlay discovery", discovery.name.lowercase().replaceFirstChar { it.uppercase() })
++        HealthRow("Visible name", advertisedName ?: "Not advertised")
 +        HealthRow("TV address", address ?: "No network address")
 +        HealthRow("Senders", connections.toString())
 +        HealthRow("Last event", event)
@@ -1548,7 +1940,7 @@ index 0000000..aeb6fe9
 +    }
 +}
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt b/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
-index 81e662d..ace155b 100644
+index 81e662d..0300fea 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/ui/MainScreen.kt
 @@ -31,7 +31,11 @@ import androidx.compose.ui.focus.FocusRequester
@@ -1563,7 +1955,15 @@ index 81e662d..ace155b 100644
  import androidx.compose.ui.graphics.Brush
  import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.graphics.asImageBitmap
-@@ -78,6 +82,8 @@ import kotlinx.coroutines.delay
+@@ -47,6 +51,7 @@ import androidx.core.view.WindowCompat
+ import androidx.core.view.WindowInsetsCompat
+ import androidx.core.view.WindowInsetsControllerCompat
+ import io.github.jqssun.airplay.R
++import io.github.jqssun.airplay.discovery.NsdServiceManager.State as DiscoveryState
+ import io.github.jqssun.airplay.service.AirPlayService.ServerState
+ import io.github.jqssun.airplay.ui.gestures.BrightnessState
+ import io.github.jqssun.airplay.ui.gestures.DoubleTapIndicator
+@@ -78,6 +83,8 @@ import kotlinx.coroutines.delay
  
  private enum class Tab(val labelRes: Int, val icon: ImageVector) {
      OVERVIEW(R.string.tab_overview, Icons.Default.Cast),
@@ -1572,7 +1972,7 @@ index 81e662d..ace155b 100644
      LOGS(R.string.tab_logs, Icons.AutoMirrored.Filled.Article),
      SETTINGS(R.string.tab_settings, Icons.Default.Settings)
  }
-@@ -88,26 +94,48 @@ fun MainScreen(
+@@ -88,26 +95,48 @@ fun MainScreen(
      isInPip: Boolean = false,
      onSurfaceAvailable: (android.view.Surface) -> Unit,
      onSurfaceDestroyed: (android.view.Surface) -> Unit,
@@ -1627,7 +2027,7 @@ index 81e662d..ace155b 100644
      }
  
      // fullscreen only once mirroring reports a size: connections rise before the kind is known
-@@ -507,7 +535,14 @@ fun MainScreen(
+@@ -507,7 +536,14 @@ fun MainScreen(
              viewModel = viewModel,
              video = video,
              onExitFullscreen = { fullscreen = false },
@@ -1643,7 +2043,7 @@ index 81e662d..ace155b 100644
          )
      } else {
          Scaffold(
-@@ -535,7 +570,14 @@ fun MainScreen(
+@@ -535,7 +571,14 @@ fun MainScreen(
              Box(modifier = Modifier.padding(padding)) {
                  TabContent(
                      tab, viewModel, video,
@@ -1659,7 +2059,7 @@ index 81e662d..ace155b 100644
                  )
              }
          }
-@@ -560,6 +602,31 @@ fun MainScreen(
+@@ -560,6 +603,31 @@ fun MainScreen(
          )
      }
  
@@ -1691,7 +2091,7 @@ index 81e662d..ace155b 100644
  }
  
  @Composable
-@@ -569,13 +636,29 @@ private fun TabContent(
+@@ -569,13 +637,29 @@ private fun TabContent(
      video: @Composable () -> Unit,
      onFullscreen: () -> Unit,
      onPip: () -> Unit,
@@ -1723,7 +2123,7 @@ index 81e662d..ace155b 100644
          Tab.LOGS -> LogsScreen(viewModel)
          Tab.SETTINGS -> SettingsScreen(viewModel)
      }
-@@ -587,7 +670,14 @@ private fun OverviewContent(
+@@ -587,7 +671,14 @@ private fun OverviewContent(
      video: @Composable () -> Unit,
      onFullscreen: () -> Unit,
      onPip: () -> Unit,
@@ -1739,16 +2139,38 @@ index 81e662d..ace155b 100644
  ) {
      val state by viewModel.serverState.collectAsState()
      val connections by viewModel.connectionCount.collectAsState()
-@@ -598,6 +688,8 @@ private fun OverviewContent(
+@@ -598,6 +689,12 @@ private fun OverviewContent(
      val videoPlaybackActive by viewModel.videoPlaybackActive.collectAsState()
      val debugEnabled by viewModel.debugEnabled.collectAsState()
      val debugInfo by viewModel.debugInfo.collectAsState()
 +    val audioOnlyMode by viewModel.audioOnlyMode.collectAsState()
 +    val approvalRequired by viewModel.approvalRequired.collectAsState()
++    val discoveryState by viewModel.discoveryState.collectAsState()
++    val advertisedName by viewModel.advertisedName.collectAsState()
++    val connectionEvent by viewModel.connectionEvent.collectAsState()
++    val photo by viewModel.photo.collectAsState()
      val tv = isTv()
      val startFocus = remember { FocusRequester() }
      LaunchedEffect(Unit) {
-@@ -626,21 +718,48 @@ private fun OverviewContent(
+@@ -616,9 +713,16 @@ private fun OverviewContent(
+             contentAlignment = Alignment.Center
+         ) {
+             val connecting = state == ServerState.RUNNING && connections > 0 &&
+-                !mirroringActive && !videoPlaybackActive
++                !mirroringActive && !videoPlaybackActive && photo == null
+             if (showAudioMode && state == ServerState.RUNNING && connections > 0) {
+                 NowPlayingContent(viewModel)
++            } else if (photo != null) {
++                Image(
++                    bitmap = photo!!.asImageBitmap(),
++                    contentDescription = stringResource(R.string.cd_airplay_photo),
++                    modifier = Modifier.fillMaxSize().background(Color.Black),
++                    contentScale = ContentScale.Fit
++                )
+             } else {
+                 if (state == ServerState.RUNNING && (mirroringActive || idlePreview)) {
+                     video()
+@@ -626,21 +730,68 @@ private fun OverviewContent(
                  if (state != ServerState.RUNNING || connections == 0) {
                      Column(horizontalAlignment = Alignment.CenterHorizontally) {
                          Icon(
@@ -1797,15 +2219,35 @@ index 81e662d..ace155b 100644
 +                        if (state == ServerState.RUNNING) {
 +                            Spacer(Modifier.height(20.dp))
 +                            Text(
-+                                text = serverName,
++                                text = advertisedName ?: serverName,
 +                                style = MaterialTheme.typography.titleLarge,
 +                                color = MaterialTheme.colorScheme.primary
 +                            )
++                            Spacer(Modifier.height(10.dp))
++                            Row(
++                                verticalAlignment = Alignment.CenterVertically,
++                                horizontalArrangement = Arrangement.spacedBy(8.dp)
++                            ) {
++                                Box(
++                                    Modifier.size(9.dp).clip(CircleShape).background(
++                                        when (discoveryState) {
++                                            DiscoveryState.ADVERTISING -> MaterialTheme.colorScheme.primary
++                                            DiscoveryState.ERROR -> MaterialTheme.colorScheme.error
++                                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
++                                        }
++                                    )
++                                )
++                                Text(
++                                    text = connectionEvent,
++                                    style = MaterialTheme.typography.bodyMedium,
++                                    color = MaterialTheme.colorScheme.onSurfaceVariant
++                                )
++                            }
 +                        }
                      }
                  } else if (connecting) {
                      Text(
-@@ -691,7 +810,7 @@ private fun OverviewContent(
+@@ -691,7 +842,7 @@ private fun OverviewContent(
              }
          }
  
@@ -1814,7 +2256,16 @@ index 81e662d..ace155b 100644
          Card(
              modifier = Modifier
                  .fillMaxWidth()
-@@ -745,6 +864,53 @@ private fun OverviewContent(
+@@ -706,7 +857,7 @@ private fun OverviewContent(
+                 ) {
+                     Column {
+                         Text(
+-                            text = serverName,
++                            text = advertisedName ?: serverName,
+                             style = MaterialTheme.typography.titleMedium,
+                             fontWeight = FontWeight.SemiBold
+                         )
+@@ -745,6 +896,53 @@ private fun OverviewContent(
                          Text(if (state == ServerState.RUNNING) stringResource(R.string.btn_stop) else stringResource(R.string.btn_start))
                      }
                  }
@@ -1868,7 +2319,7 @@ index 81e662d..ace155b 100644
              }
          }
      }
-@@ -755,12 +921,21 @@ private fun FullscreenVideo(
+@@ -755,12 +953,21 @@ private fun FullscreenVideo(
      viewModel: MainViewModel,
      video: @Composable () -> Unit,
      onExitFullscreen: () -> Unit,
@@ -1891,7 +2342,7 @@ index 81e662d..ace155b 100644
      var controlsVisible by remember { mutableStateOf(true) }
      var tapTick by remember { mutableStateOf(0) }
      LaunchedEffect(tapTick) {
-@@ -768,11 +943,27 @@ private fun FullscreenVideo(
+@@ -768,11 +975,27 @@ private fun FullscreenVideo(
          delay(8000)
          controlsVisible = false
      }
@@ -1919,7 +2370,7 @@ index 81e662d..ace155b 100644
              .pointerInput(Unit) { detectTapGestures { tapTick++ } },
          contentAlignment = Alignment.Center
      ) {
-@@ -782,6 +973,24 @@ private fun FullscreenVideo(
+@@ -782,6 +1005,24 @@ private fun FullscreenVideo(
              modifier = Modifier.align(Alignment.TopEnd)
          ) {
              Row(modifier = Modifier.padding(8.dp)) {
@@ -2183,10 +2634,14 @@ index 4f5f226..9dfe777 100644
 +    MaterialTheme(colorScheme = FireMirrorColors, typography = Typography(), content = content)
  }
 diff --git a/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt b/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
-index 197800c..c5a8483 100644
+index 197800c..0677726 100644
 --- a/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
 +++ b/app/src/main/kotlin/io/github/jqssun/airplay/viewmodel/MainViewModel.kt
-@@ -4,6 +4,7 @@ import android.app.Application
+@@ -1,9 +1,11 @@
+ package io.github.jqssun.airplay.viewmodel
+ 
+ import android.app.Application
++import android.graphics.Bitmap
  import android.content.Context
  import android.content.Intent
  import android.media.AudioManager
@@ -2194,7 +2649,15 @@ index 197800c..c5a8483 100644
  import android.os.SystemClock
  import android.view.Surface
  import androidx.core.content.FileProvider
-@@ -89,12 +90,31 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -14,6 +16,7 @@ import io.github.jqssun.airplay.Prefs
+ import io.github.jqssun.airplay.audio.TrackInfo
+ import io.github.jqssun.airplay.service.AirPlayService
+ import io.github.jqssun.airplay.service.AirPlayService.ServerState
++import io.github.jqssun.airplay.discovery.NsdServiceManager.State as DiscoveryState
+ import dagger.hilt.android.lifecycle.HiltViewModel
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.delay
+@@ -89,12 +92,37 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      fun audioScanEnd() { service?.dacpController?.playResume() }
      fun audioMuteToggle() { service?.dacpController?.muteToggle() }
  
@@ -2218,6 +2681,12 @@ index 197800c..c5a8483 100644
 +    val networkAddress: StateFlow<String?> = _networkAddress.asStateFlow()
 +    private val _connectionEvent = MutableStateFlow("Waiting for a connection")
 +    val connectionEvent: StateFlow<String> = _connectionEvent.asStateFlow()
++    private val _discoveryState = MutableStateFlow(DiscoveryState.IDLE)
++    val discoveryState: StateFlow<DiscoveryState> = _discoveryState.asStateFlow()
++    private val _advertisedName = MutableStateFlow<String?>(null)
++    val advertisedName: StateFlow<String?> = _advertisedName.asStateFlow()
++    private val _photo = MutableStateFlow<Bitmap?>(null)
++    val photo: StateFlow<Bitmap?> = _photo.asStateFlow()
 +    private val _audioActive = MutableStateFlow(false)
 +    val audioActive: StateFlow<Boolean> = _audioActive.asStateFlow()
 +    private val _trustedAddresses = MutableStateFlow(prefs.getStringSet(Prefs.TRUSTED_ADDRESSES, emptySet())?.toSet().orEmpty())
@@ -2226,7 +2695,7 @@ index 197800c..c5a8483 100644
      private val _pinCode = MutableStateFlow<String?>(null)
      val pinCode: StateFlow<String?> = _pinCode.asStateFlow()
  
-@@ -158,6 +178,13 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -158,6 +186,13 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
  
      private val _maxFps = MutableStateFlow(prefs.getInt(Prefs.MAX_FPS, Prefs.DEF_MAX_FPS))
      val maxFps: StateFlow<Int> = _maxFps.asStateFlow()
@@ -2240,7 +2709,7 @@ index 197800c..c5a8483 100644
  
      private val _overscanned = MutableStateFlow(prefs.getBoolean(Prefs.OVERSCANNED, Prefs.DEF_OVERSCANNED))
      val overscanned: StateFlow<Boolean> = _overscanned.asStateFlow()
-@@ -165,6 +192,12 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -165,6 +200,12 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      private val _requirePin = MutableStateFlow(prefs.getBoolean(Prefs.REQUIRE_PIN, Prefs.DEF_REQUIRE_PIN))
      val requirePin: StateFlow<Boolean> = _requirePin.asStateFlow()
  
@@ -2253,7 +2722,7 @@ index 197800c..c5a8483 100644
      private val _allowNewConn = MutableStateFlow(prefs.getBoolean(Prefs.ALLOW_NEW_CONN, Prefs.DEF_ALLOW_NEW_CONN))
      val allowNewConn: StateFlow<Boolean> = _allowNewConn.asStateFlow()
  
-@@ -186,6 +219,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -186,6 +227,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      private val _advertiseAudio = MutableStateFlow(prefs.getBoolean(Prefs.ADVERTISE_AUDIO, Prefs.DEF_ADVERTISE_AUDIO))
      val advertiseAudio: StateFlow<Boolean> = _advertiseAudio.asStateFlow()
  
@@ -2263,7 +2732,7 @@ index 197800c..c5a8483 100644
      private val _launchOnConnect = MutableStateFlow(prefs.getBoolean(Prefs.LAUNCH_ON_CONNECT, Prefs.DEF_LAUNCH_ON_CONNECT))
      val launchOnConnect: StateFlow<Boolean> = _launchOnConnect.asStateFlow()
  
-@@ -210,6 +246,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -210,6 +254,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
  
      private val _debugInfo = MutableStateFlow(DebugInfo())
      val debugInfo: StateFlow<DebugInfo> = _debugInfo.asStateFlow()
@@ -2271,7 +2740,7 @@ index 197800c..c5a8483 100644
  
      // audio mode
      private val _audioOnly = MutableStateFlow(false)
-@@ -353,8 +390,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -353,8 +398,7 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
              delay(SERVER_RESTART_DEBOUNCE_MS)
              val svc = service ?: return@launch
              if (svc.serverState.value == ServerState.RUNNING) {
@@ -2281,7 +2750,7 @@ index 197800c..c5a8483 100644
              }
          }
      }
-@@ -394,10 +430,45 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -394,10 +438,45 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      fun setForceSwAlac(v: Boolean) { _forceSwAlac.value = v; prefs.edit().putBoolean(Prefs.FORCE_SW_ALAC, v).apply() }
      fun setAlacEnabled(v: Boolean) { _alacEnabled.value = v; prefs.edit().putBoolean(Prefs.ALAC_ENABLED, v).apply(); _applyByServerRestart() }
      fun setAacEnabled(v: Boolean) { _aacEnabled.value = v; prefs.edit().putBoolean(Prefs.AAC_ENABLED, v).apply(); _applyByServerRestart() }
@@ -2329,7 +2798,7 @@ index 197800c..c5a8483 100644
      fun setAllowNewConn(v: Boolean) { _allowNewConn.value = v; prefs.edit().putBoolean(Prefs.ALLOW_NEW_CONN, v).apply(); _applyByServerRestart() }
      fun setAudioLatencyMs(v: Int) { _audioLatencyMs.value = v; prefs.edit().putInt(Prefs.AUDIO_LATENCY_MS, v).apply(); _applyByServerRestart() }
      fun setIdlePreview(v: Boolean) { _idlePreview.value = v; prefs.edit().putBoolean(Prefs.IDLE_PREVIEW, v).apply() }
-@@ -405,6 +476,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -405,6 +484,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
      fun setKeepScreenOn(v: Boolean) { _keepScreenOn.value = v; prefs.edit().putBoolean(Prefs.KEEP_SCREEN_ON, v).apply() }
      fun setAdvertiseVideo(v: Boolean) { _advertiseVideo.value = v; prefs.edit().putBoolean(Prefs.ADVERTISE_VIDEO, v).apply(); _applyByServerRestart() }
      fun setAdvertiseAudio(v: Boolean) { _advertiseAudio.value = v; prefs.edit().putBoolean(Prefs.ADVERTISE_AUDIO, v).apply(); _applyByServerRestart() }
@@ -2341,19 +2810,22 @@ index 197800c..c5a8483 100644
      fun setLaunchOnConnect(v: Boolean) { _launchOnConnect.value = v; prefs.edit().putBoolean(Prefs.LAUNCH_ON_CONNECT, v).apply() }
      fun setDebugEnabled(v: Boolean) { _debugEnabled.value = v; prefs.edit().putBoolean(Prefs.DEBUG_ENABLED, v).apply() }
      fun setDeveloperOptions(v: Boolean) {
-@@ -551,6 +627,11 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -551,6 +635,14 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
          service?.let {
              _serverState.value = it.serverState.value
              _connectionCount.value = it.connectionCount.value
 +            _networkAddress.value = it.networkAddress.value
 +            _connectionEvent.value = it.connectionEvent.value
++            _discoveryState.value = it.discoveryState.value
++            _advertisedName.value = it.advertisedName.value
++            _photo.value = it.photo.value
 +            _audioActive.value = it.audioActive.value
 +            _trustedAddresses.value = it.trustedAddresses.value
 +            _pendingApproval.value = it.pendingApproval.value
              _videoAspect.value = it.videoAspect.value
              _videoResolution.value = it.videoResolution.value
              _audioOnly.value = it.audioOnly.value
-@@ -595,8 +676,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
+@@ -595,8 +687,9 @@ class MainViewModel @Inject constructor(app: Application) : AndroidViewModel(app
              }
              _mirroringActive.value = it.mirroringActive.value
              _trackInfo.value = it.trackInfo.value
@@ -3652,7 +4124,7 @@ index cb3af28..2736038 100644
 +        android:pathData="M24,73.5 A4.5,4.5 0,1 1,24,82.5 A4.5,4.5 0,1 1,24,73.5 Z" />
  </vector>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 9a17a5d..ccc27d7 100644
+index 9a17a5d..1fb4053 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1,17 +1,19 @@
@@ -3678,7 +4150,7 @@ index 9a17a5d..ccc27d7 100644
      <string name="tab_logs">Logs</string>
      <string name="tab_settings">Settings</string>
  
-@@ -26,6 +28,54 @@
+@@ -26,12 +28,61 @@
      <string name="btn_start">Start</string>
      <string name="btn_stop">Stop</string>
      <string name="unknown_track">Unknown</string>
@@ -3733,7 +4205,14 @@ index 9a17a5d..ccc27d7 100644
  
      <!-- Content descriptions -->
      <string name="cd_pip">Picture-in-Picture</string>
-@@ -152,7 +202,7 @@
+     <string name="cd_fullscreen">Fullscreen</string>
+     <string name="cd_exit_fullscreen">Exit fullscreen</string>
+     <string name="cd_cover_art">Cover art</string>
++    <string name="cd_airplay_photo">Photo shared through AirPlay</string>
+     <string name="cd_play_pause">Play/Pause</string>
+     <string name="cd_rewind">Rewind</string>
+     <string name="cd_fast_forward">Fast forward</string>
+@@ -152,7 +203,7 @@
      <string name="setting_scheduled_output_buffer_release">Aligned frame pacing</string>
      <string name="setting_scheduled_output_buffer_release_desc">Schedule each decoded frame to the VSYNC matching its presentation timestamp</string>
      <string name="setting_audio_delay">Override audio delay</string>
