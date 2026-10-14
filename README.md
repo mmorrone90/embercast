@@ -1,6 +1,8 @@
-# FireMirror
+# EmberCast
 
-FireMirror is a local Mac and phone to Fire TV screen mirroring prototype. Its receiver uses the pinned [Android AirPlay Server](https://github.com/jqssun/android-airplay-server) source and UxPlay protocol implementation. The original Kotlin TV interface remains in `app/` as the Phase 1 prototype; the functional receiver build is in `receiver/`. The Android phone sender is in `phone/`.
+EmberCast is a local Mac and phone to Fire TV screen mirroring app. Its receiver uses the pinned [Android AirPlay Server](https://github.com/jqssun/android-airplay-server) source and UxPlay protocol implementation. The original Kotlin TV interface remains in `app/` as the Phase 1 prototype; the functional receiver build is in `receiver/`. The Android phone sender is in `phone/`. The GitHub repository and Android package IDs retain their existing names so existing installs and links continue to work.
+
+Version 0.8 brings the EmberCast name and warm charcoal, ivory and apricot design to the TV receiver and phone app. The Fire TV launcher uses an apricot square icon and a matching 320 × 180 banner. Existing receiver settings that still use the original default name are changed to EmberCast on launch; a custom receiver name is kept. Package IDs remain stable, so this update can install over the existing apps.
 
 Version 0.3 adds a redesigned TV home screen, fit, crop, stretch and zoom controls for live mirroring, an optional TV approval prompt for new network addresses, audio only discovery mode, screenshots, silent MP4 recordings, and a Captures screen for sharing or deleting saved files. Recording uses Android's screen capture permission prompt. A Mac to Fire TV session verified live video, zoom, screenshot saving, and a playable silent recording. Audio output and iPhone or iPad sending still need device tests.
 
@@ -14,15 +16,15 @@ Version 0.5.1 adds new Fire TV artwork and lets the Android sender resize its ca
 
 Version 0.6 adds Android app playback audio on Android 10 or newer. The phone asks for audio recording permission, captures supported media and game playback through the same screen sharing approval, and sends stereo PCM to the TV speaker output. Denying audio permission or using an older Android version leaves video sharing available. Apps can prohibit playback capture, so some video or music may still be silent on the TV. This captures app playback rather than the microphone. The transport remains unencrypted and should be used only on a trusted local network. A Test TV sound button plays a short media tone while sharing. Protocol and build tests pass; an emulator captured a non silent test tone and the physical Fire TV reported an active 48 kHz HDMI audio track. The user confirmed audible playback from a Samsung phone.
 
-Version 0.7 makes AirPlay discovery easier to diagnose and adds direct AirPlay photo display. The receiver now registers its network services in sequence, reports whether it is registering, visible, or unavailable, and shows the exact name advertised to Apple devices. Photos sent through AirPlay are decoded with size and pixel limits and shown at their original aspect ratio. The launcher now declares a square 320 × 320 icon and a separate 320 × 180 TV banner. This matches the Android TV arrangement used by iMirror and lets each launcher choose the correct asset. The receiver build and unit tests pass. AirPlay photos and the refreshed discovery screen still need a physical iPhone or iPad and visible TV test.
+Version 0.7 makes AirPlay discovery easier to diagnose and adds direct AirPlay photo display. The receiver registers its network services in sequence, reports whether it is registering, visible, or unavailable, and shows the exact name advertised to Apple devices. Photos sent through AirPlay are decoded with size and pixel limits and shown at their original aspect ratio.
 
-Phone version 0.3.1 silences the phone's media output while supported app audio is being sent to the TV, then restores the previous media volume when sharing stops. It leaves a nonzero manual volume change made during sharing in place. The saved volume is also recovered when FireMirror Phone next opens after an interrupted session. On a fixed volume device, or if Android refuses to change the media volume, phone audio may continue locally. The emulator captured a non silent test tone with its local media volume at zero while the physical Fire TV created an audio output track; stopping sharing restored the emulator's original volume. The Samsung phone still needs a test with this version installed.
+Phone version 0.3.1 silences the phone's media output while supported app audio is being sent to the TV, then restores the previous media volume when sharing stops. It leaves a nonzero manual volume change made during sharing in place. The saved volume is also recovered when EmberCast Phone next opens after an interrupted session. On a fixed volume device, or if Android refuses to change the media volume, phone audio may continue locally. The emulator captured a non silent test tone with its local media volume at zero while the physical Fire TV created an audio output track; stopping sharing restored the emulator's original volume. The Samsung phone still needs a test with this version installed.
 
 Phone version 0.3.2 keeps the media output silent throughout sharing if another app raises the volume after capture starts. The original pre sharing volume is retained for restoration. The phone screen shows its installed version so device reports can be matched to a build.
 
 Some streaming apps protect their video surface from Android screen capture. Their controls or subtitles may appear on the TV while the video remains black. In that case, open the streaming service's own Fire TV app. Crunchyroll is already installed on the tested Fire TV Stick.
 
-AirPlay is the receiver protocol for Macs, iPhones, and iPads. The Mac baseline has been tested; iPhone and iPad behavior still needs device testing. Android phones use the FireMirror Phone app, not the system Cast menu. On Fire TV models that support it, Windows and Android users can also use Fire TV's separate built in Miracast screen. Google Cast is not implemented in FireMirror. Google's official [Cast receiver documentation](https://developers.google.com/cast/docs/android_tv_receiver/core_features) describes an Android TV receiver tied to Cast device and application registration, not a general Fire TV screen mirroring library. Amazon documents [Fire TV Miracast setup](https://digprjsurvey.amazon.com/csad/help/node/ToUjwyfVuffzVfbR6b) separately.
+AirPlay is the receiver protocol for Macs, iPhones, and iPads. The Mac baseline has been tested; iPhone and iPad behavior still needs device testing. Android phones use EmberCast Phone, not the system Cast menu. On Fire TV models that support it, Windows and Android users can also use Fire TV's separate built in Miracast screen. Google Cast is not implemented. Google's official [Cast receiver documentation](https://developers.google.com/cast/docs/android_tv_receiver/core_features) describes an Android TV receiver tied to Cast device and application registration, not a general Fire TV screen mirroring library. Amazon documents [Fire TV Miracast setup](https://digprjsurvey.amazon.com/csad/help/node/ToUjwyfVuffzVfbR6b) separately.
 
 On 30 September 2026, the receiver baseline started on an Amazon Fire TV Stick (3rd Gen), advertised itself to a Mac over Bonjour, and displayed the Mac desktop on the TV. This is a device test, not a promise of compatibility with every Mac, Fire TV, codec, or protected video service. Audio and sustained performance have not yet been verified.
 
@@ -36,15 +38,17 @@ cd firemirror
 ./scripts/build-receiver.sh
 ```
 
-The script pins the upstream receiver, applies `patches/receiver-firemirror.patch`, builds the APK, and writes `dist/FireMirror-receiver-debug.apk`. The patch sets the app ID to `dev.firemirror.receiver`, the visible receiver name to `FireMirror`, and the default listener port to 7100. Fire OS already uses port 7000 on the tested device. Automatic server start when the app opens remains enabled; automatic start at device boot is disabled. Nested UxPlay patches provide the optional connection approval gate and direct AirPlay photo endpoint.
+The script pins the upstream receiver, applies `patches/receiver-firemirror.patch`, builds the APK, and writes `dist/EmberCast-receiver-debug.apk`. The app ID remains `dev.firemirror.receiver`, the advertised receiver name is EmberCast, and the default listener port is 7100. Fire OS already uses port 7000 on the tested device. Automatic server start when the app opens remains enabled; automatic start at device boot is disabled. Nested UxPlay patches provide the optional connection approval gate and direct AirPlay photo endpoint.
 
 The APK is signed by the local Android debug keystore. Keep that key for updates that preserve app data. A build on another computer normally has a different debug key and will not install as an update over this build.
 
 ## Build and use the Android phone app
 
-Run `./scripts/build-phone.sh` to create `dist/FireMirror-phone-debug.apk`. Install that APK on an Android phone running Android 8 or newer. The phone and TV must be on the same local network. Open FireMirror on the TV, then FireMirror Phone on Android. Select the TV shown under Nearby Fire TV and tap Mirror this phone. On Android 10 or newer, allow audio recording permission to share supported app playback. Approve the Android screen capture prompt and the connection prompt on the TV. FireMirror Phone mutes the phone's media output while it sends supported app audio to the TV. Tap Stop sharing on the phone or its notification to end the session and restore the previous media volume.
+Run `./scripts/build-phone.sh` to create `dist/EmberCast-phone-debug.apk`. Install that APK on an Android phone running Android 8 or newer. The phone and TV must be on the same local network. Open EmberCast on the TV, then EmberCast Phone on Android. Select the TV shown under Nearby EmberCast and tap Mirror this phone. On Android 10 or newer, allow audio recording permission to share supported app playback. Approve the Android screen capture prompt and the connection prompt on the TV. EmberCast Phone mutes the phone's media output while it sends supported app audio to the TV. Tap Stop sharing on the phone or its notification to end the session and restore the previous media volume.
 
-If discovery does not list the TV, enter the address shown on the TV's Connection health screen. The manual address points at the same FireMirror app and uses port 7102. The Mac and iPhone continue to use the Screen Mirroring menu and AirPlay on port 7100. Android phone mirroring does not appear in Android's built in Cast menu. Install receiver version 0.6 or newer before installing the phone app with audio support.
+The app icon, TV banner, and Appstore artwork are generated from `artwork/render_embercast_assets.swift`. Run `swift artwork/render_embercast_assets.swift .` to regenerate the 320 × 320 square icon, 320 × 180 banner, and 1280 × 720 store image.
+
+If discovery does not list the TV, enter the address shown on the TV's Connection health screen. The manual address points at the same EmberCast app and uses port 7102. The Mac and iPhone continue to use the Screen Mirroring menu and AirPlay on port 7100. Android phone mirroring does not appear in Android's built in Cast menu. Install receiver version 0.6 or newer before installing the phone app with audio support.
 
 ## Install on the Fire TV
 
@@ -52,17 +56,17 @@ Enable ADB Debugging on the Fire TV and connect from a Mac on the same LAN. Repl
 
 ```sh
 adb connect FIRE_TV_IP:5555
-adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
+adb -s FIRE_TV_IP:5555 install -r dist/EmberCast-receiver-debug.apk
 adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.receiver/io.github.jqssun.airplay.MainActivity
 ```
 
-Accept the debugging prompt on the TV. Leave FireMirror open. On the Mac, open Control Center → Screen Mirroring → FireMirror. The TV and Mac must be able to reach each other on the local network. No account, cloud server, or internet route is required for the mirroring protocol.
+Accept the debugging prompt on the TV. Leave EmberCast open. On the Mac, open Control Centre → Screen Mirroring → EmberCast. The TV and Mac must be able to reach each other on the local network. No account, cloud server, or internet route is required for the mirroring protocol.
 
 If the app starts but the Mac does not list it, inspect the local service and device log:
 
 ```sh
 dns-sd -B _airplay._tcp local.
-dns-sd -L FireMirror _airplay._tcp local.
+dns-sd -L EmberCast _airplay._tcp local.
 adb -s FIRE_TV_IP:5555 logcat -v time 'AirPlayService:I' 'NsdServiceManager:I' '*:S'
 ```
 
@@ -70,6 +74,6 @@ For detailed ADB setup, updates, and removal, see [installation instructions](do
 
 ## Source and licensing
 
-`receiver/` is pinned to Android AirPlay Server revision `c8defdd70d7e6a04f4f1b71d353653682d594106`. Its native dependencies are pinned through its own submodules. The patch contains FireMirror branding, package ID, version, port, and boot behavior. The receiver and its components retain their upstream licenses and notices. This repository is GPL version 3 only; see [notices](NOTICE.md) and the upstream source. When distributing an APK, distribute the corresponding source, patch, dependency revisions, and build scripts.
+`receiver/` is pinned to Android AirPlay Server revision `c8defdd70d7e6a04f4f1b71d353653682d594106`. Its native dependencies are pinned through its own submodules. The patch contains EmberCast branding, stable package ID, version, port, and boot behavior. The receiver and its components retain their upstream licenses and notices. This repository is GPL version 3 only; see [notices](NOTICE.md) and the upstream source. When distributing an APK, distribute the corresponding source, patch, dependency revisions, and build scripts.
 
 This project is for ordinary screen mirroring. Protected streaming content and DRM bypass are outside scope. AirPlay, macOS, and Mac are Apple trademarks; Fire TV is an Amazon trademark. The project is not affiliated with Apple or Amazon.

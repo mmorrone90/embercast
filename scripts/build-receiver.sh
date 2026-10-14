@@ -23,5 +23,5 @@ fi
 (cd "$receiver_dir" && ./gradlew :app:assembleDebug --console=plain)
 
 mkdir -p "$project_dir/dist"
-cp "$receiver_dir/app/build/outputs/apk/debug/app-debug.apk" "$project_dir/dist/FireMirror-receiver-debug.apk"
-echo "Built $project_dir/dist/FireMirror-receiver-debug.apk"
+cp "$receiver_dir/app/build/outputs/apk/debug/app-debug.apk" "$project_dir/dist/EmberCast-receiver-debug.apk"
+echo "Built $project_dir/dist/EmberCast-receiver-debug.apk"

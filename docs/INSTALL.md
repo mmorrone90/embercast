@@ -2,7 +2,7 @@
 
 These steps apply to Android based Fire OS, not Vega OS. This APK requires Android API 24 or newer. [Amazon's ADB guide](https://developer.amazon.com/docs/fire-tv/connecting-adb-to-device.html) is the reference for device connection, and [Amazon's installation guide](https://developer.amazon.com/docs/fire-tv/installing-and-running-your-app.html) covers package management.
 
-For Mac screen mirroring, build and install `dist/FireMirror-receiver-debug.apk` with `./scripts/build-receiver.sh`. The root `app/` module is the earlier interface prototype and cannot receive a stream.
+For Mac screen mirroring, build and install `dist/EmberCast-receiver-debug.apk` with `./scripts/build-receiver.sh`. The root `app/` module is the earlier interface prototype and cannot receive a stream.
 
 ## Prepare the Fire TV
 
@@ -47,11 +47,11 @@ From the project directory:
 
 ```sh
 ./scripts/build-receiver.sh
-adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
+adb -s FIRE_TV_IP:5555 install -r dist/EmberCast-receiver-debug.apk
 adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.receiver/io.github.jqssun.airplay.MainActivity
 ```
 
-The receiver uses port 7100 because port 7000 is occupied on the tested Fire TV. With the app open, select FireMirror in the Mac's Control Center → Screen Mirroring menu. The Mac and Fire TV must be on a LAN that permits mDNS discovery and direct device connections.
+The receiver uses port 7100 because port 7000 is occupied on the tested Fire TV. With the app open, select EmberCast in the Mac's Control Center → Screen Mirroring menu. The Mac and Fire TV must be on a LAN that permits mDNS discovery and direct device connections.
 
 ## Install the earlier interface prototype
 
@@ -62,12 +62,12 @@ adb -s FIRE_TV_IP:5555 install app/build/outputs/apk/debug/app-debug.apk
 adb -s FIRE_TV_IP:5555 shell am start -n dev.firemirror.tv/.MainActivity
 ```
 
-The separately delivered `FireMirror-phase1-debug.apk` is the same build and can be installed using its path. FireMirror also appears in the TV app launcher. If it is absent from the recent apps row, use Your Apps & Channels or start through ADB.
+The separately delivered `FireMirror-phase1-debug.apk` is the same build and can be installed using its path. EmberCast also appears in the TV app launcher. If it is absent from the recent apps row, use Your Apps & Channels or start through ADB.
 
 ## Update while preserving settings
 
 ```sh
-adb -s FIRE_TV_IP:5555 install -r dist/FireMirror-receiver-debug.apk
+adb -s FIRE_TV_IP:5555 install -r dist/EmberCast-receiver-debug.apk
 ```
 
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE` usually indicates a signing key mismatch. Rebuild with the original key to retain settings. Uninstalling removes saved preferences.
@@ -104,4 +104,4 @@ adb -s FIRE_TV_IP:5555 uninstall dev.firemirror.receiver
 adb disconnect FIRE_TV_IP:5555
 ```
 
-You can turn off ADB Debugging after testing. FireMirror itself does not need ADB to launch.
+You can turn off ADB Debugging after testing. EmberCast itself does not need ADB to launch.

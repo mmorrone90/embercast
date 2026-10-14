@@ -24,9 +24,9 @@ jobs:
       - run: cd receiver && ./gradlew :app:testDebugUnitTest
       - uses: actions/upload-artifact@v4
         with:
-          name: FireMirror-receiver-debug
-          path: dist/FireMirror-receiver-debug.apk
+          name: EmberCast-receiver-debug
+          path: dist/EmberCast-receiver-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: FireMirror-phone-debug
-          path: dist/FireMirror-phone-debug.apk
+          name: EmberCast-phone-debug
+          path: dist/EmberCast-phone-debug.apk

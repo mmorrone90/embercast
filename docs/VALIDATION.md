@@ -107,3 +107,9 @@ The receiver registers RAOP, AirPlay, and phone discovery services in sequence. 
 The nested UxPlay patch adds the AirPlay photo endpoint and forwards photo data to Kotlin. The receiver rejects payloads larger than 25 MB, validates image dimensions, limits decoded images to 40 million pixels, downsamples very large images, and displays accepted photos against a black background while preserving their aspect ratio. Starting a mirror or video session clears the photo.
 
 The APK uses a 320 × 320 xhdpi square application icon and a separate 320 × 180 xhdpi TV banner. `aapt2 dump badging` reports the square file as the application icon and the rectangular file as the Leanback activity banner. This matches the icon and banner arrangement in iMirror. The receiver unit tests and debug APK build pass for version `0.7.0`, code 12. The physical Fire TV was asleep, so installation, visual inspection, and an AirPlay photo transfer remain pending.
+
+## EmberCast 0.8 visual identity
+
+The receiver and Android phone app now use the EmberCast name, a warm charcoal and ivory interface, and apricot highlights. The TV uses a square phone and television mark, a separate 320 × 180 banner, and 1280 × 720 store artwork. The phone sender shares the square icon and palette. Android package IDs are unchanged. On first launch, the receiver changes the old default advertised name to EmberCast while preserving a custom name.
+
+`./scripts/build-receiver.sh` produced `dist/EmberCast-receiver-debug.apk` at version 0.8.0, code 13. `./scripts/build-phone.sh` produced `dist/EmberCast-phone-debug.apk` at version 0.4.0, code 6. The Fire TV remains on version 0.6.0 while its display is off; installation and visual inspection of its launcher tile are pending.

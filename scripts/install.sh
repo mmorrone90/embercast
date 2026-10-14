@@ -7,7 +7,7 @@ fi
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 device="$1"
 case "$device" in *:*) ;; *) device="${device}:5555" ;; esac
-apk="${2:-$project_dir/dist/FireMirror-receiver-debug.apk}"
+apk="${2:-$project_dir/dist/EmberCast-receiver-debug.apk}"
 if ! command -v adb >/dev/null; then
     echo 'Add Android SDK platform-tools to PATH first.' >&2
     exit 1
@@ -24,11 +24,11 @@ fi
 api="$(adb -s "$device" shell getprop ro.build.version.sdk | tr -d '\r')"
 case "$api" in ''|*[!0-9]*) echo 'Could not identify Android API level.' >&2; exit 1 ;; esac
 if [ "$api" -lt 24 ]; then
-    echo 'FireMirror requires Android API 24 or newer.' >&2
+    echo 'EmberCast requires Android API 24 or newer.' >&2
     exit 1
 fi
 adb -s "$device" install -r "$apk"
 adb -s "$device" shell am start -n dev.firemirror.receiver/io.github.jqssun.airplay.MainActivity
 if adb -s "$device" shell pm path dev.firemirror.tv | grep -q '^package:'; then
-    echo 'An older FireMirror package is also installed. Back up its captures and settings before removing it; see docs/INSTALL.md.' >&2
+    echo 'A legacy FireMirror package is also installed. Back up its captures and settings before removing it; see docs/INSTALL.md.' >&2
 fi

@@ -128,7 +128,7 @@ class ShareService : Service() {
                 }
             }, Handler(Looper.getMainLooper()))
             virtualDisplay = screen.createVirtualDisplay(
-                "FireMirror", initialSize.width, initialSize.height, metrics.densityDpi,
+                "EmberCast", initialSize.width, initialSize.height, metrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null
             )
             if (audioEnabled) startPlaybackAudio(screen, output)
@@ -260,7 +260,7 @@ class ShareService : Service() {
             phoneMuted = false
             if (sharing.get()) {
                 runCatching { PhoneMirrorPackets.audioEnded(output) }
-                status = "Showing your screen on FireMirror; phone audio is unavailable"
+                status = "Showing your screen on EmberCast; phone audio is unavailable"
             }
         }
     }
@@ -342,8 +342,8 @@ class ShareService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.presence_video_online)
-            .setContentTitle("FireMirror is sharing your screen")
-            .setContentText("Tap to return to FireMirror")
+            .setContentTitle("EmberCast is sharing your screen")
+            .setContentText("Tap to return to EmberCast")
             .setContentIntent(open)
             .addAction(android.R.drawable.ic_media_pause, "Stop", stop)
             .setOngoing(true)
@@ -351,9 +351,9 @@ class ShareService : Service() {
     }
 
     private fun sharingStatus() = when {
-        audioActive && phoneMuted -> "Showing your screen and app sound on FireMirror; phone media is silent"
-        audioActive -> "Showing your screen and app sound on FireMirror; phone media may also play"
-        else -> "Showing your screen on FireMirror; phone audio is unavailable"
+        audioActive && phoneMuted -> "Showing your screen and app sound on EmberCast; phone media is silent"
+        audioActive -> "Showing your screen and app sound on EmberCast; phone media may also play"
+        else -> "Showing your screen on EmberCast; phone audio is unavailable"
     }
 
     private fun finish(message: String?) {

@@ -78,30 +78,30 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply { addView(page) }
         setContentView(scroll)
 
-        page.addView(label("FIREMIRROR", 13f, ACCENT, true).apply { letterSpacing = .18f })
-        page.addView(label("Your phone.\nOn the big screen.", 34f, Color.WHITE, true).apply {
+        page.addView(label("EMBERCAST", 13f, ACCENT, true).apply { letterSpacing = .18f })
+        page.addView(label("Your phone.\nOn the big screen.", 34f, TEXT, true).apply {
             setPadding(0, dp(20), 0, dp(10))
         })
         @Suppress("DEPRECATION")
         val version = packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
-        page.addView(label("FireMirror Phone $version", 13f, MUTED, false))
+        page.addView(label("EmberCast Phone $version", 13f, MUTED, false))
         page.addView(label("Find your Fire TV on the same WiFi, then share your screen.", 16f, MUTED, false))
 
-        page.addView(label("NEARBY FIRE TV", 12f, ACCENT, true).apply {
+        page.addView(label("NEARBY EMBERCAST", 12f, ACCENT, true).apply {
             setPadding(0, dp(34), 0, dp(12))
         })
         deviceList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         page.addView(deviceList)
         renderDevices()
 
-        page.addView(label("TV address", 15f, Color.WHITE, true).apply {
+        page.addView(label("TV address", 15f, TEXT, true).apply {
             setPadding(0, dp(26), 0, dp(8))
         })
         address = EditText(this).apply {
             setSingleLine(true)
             hint = "Enter the TV address if it is not found"
             setText(getPreferences(MODE_PRIVATE).getString("tv_address", ""))
-            setTextColor(Color.WHITE)
+            setTextColor(TEXT)
             setHintTextColor(MUTED)
             textSize = 15f
             setPadding(dp(16), dp(12), dp(16), dp(12))
@@ -113,14 +113,14 @@ class MainActivity : Activity() {
             setOnClickListener { beginShare() }
         }
         page.addView(connect, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(26) })
-        stop = button("Stop sharing", PANEL, Color.WHITE).apply {
+        stop = button("Stop sharing", PANEL, TEXT).apply {
             isEnabled = false
             setOnClickListener {
                 startService(Intent(this@MainActivity, ShareService::class.java).setAction(ShareService.ACTION_STOP))
             }
         }
         page.addView(stop, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
-        testSound = button("Test TV sound", PANEL, Color.WHITE).apply {
+        testSound = button("Test TV sound", PANEL, TEXT).apply {
             isEnabled = false
             setOnClickListener { TestSound.play() }
         }
@@ -137,7 +137,7 @@ class MainActivity : Activity() {
 
     private fun beginShare() {
         val manual = address.text.toString().trim()
-        val tv = if (manual.isNotEmpty()) Tv("FireMirror", manual, 7102) else chosen
+        val tv = if (manual.isNotEmpty()) Tv("EmberCast", manual, 7102) else chosen
         if (tv == null) {
             status.text = "Choose a nearby TV or enter its address."
             return
@@ -235,7 +235,7 @@ class MainActivity : Activity() {
     private fun renderDevices() {
         deviceList.removeAllViews()
         if (devices.isEmpty()) {
-            deviceList.addView(label("Searching for FireMirror…", 15f, MUTED, false).apply {
+            deviceList.addView(label("Searching for EmberCast…", 15f, MUTED, false).apply {
                 setPadding(dp(16), dp(20), dp(16), dp(20))
                 background = rounded(PANEL, 16)
             })
@@ -253,7 +253,7 @@ class MainActivity : Activity() {
                     address.text.clear()
                     renderDevices()
                 }
-                addView(label("${if (selected) "● " else "○ "}${tv.name}", 18f, Color.WHITE, true))
+                addView(label("${if (selected) "● " else "○ "}${tv.name}", 18f, TEXT, true))
                 addView(label(tv.host, 13f, MUTED, false))
             }
             deviceList.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
@@ -285,10 +285,11 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_CAPTURE = 20
         private const val REQUEST_AUDIO = 21
-        private const val BACKGROUND = 0xFF0A1514.toInt()
-        private const val PANEL = 0xFF1D302E.toInt()
-        private const val SELECTED = 0xFF2F5550.toInt()
-        private const val ACCENT = 0xFF6CDCCF.toInt()
-        private const val MUTED = 0xFFADC1BD.toInt()
+        private const val BACKGROUND = 0xFF1B1917.toInt()
+        private const val PANEL = 0xFF2B2723.toInt()
+        private const val SELECTED = 0xFF4E372C.toInt()
+        private const val ACCENT = 0xFFFFB184.toInt()
+        private const val TEXT = 0xFFF7F1E9.toInt()
+        private const val MUTED = 0xFFBCAF9F.toInt()
     }
 }

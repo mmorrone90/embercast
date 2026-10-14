@@ -10,7 +10,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="FireMirror Phone"
+        android:label="@string/app_name"
         android:icon="@drawable/phone_icon"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
