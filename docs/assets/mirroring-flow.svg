@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title description">
   <title id="title">EmberCast screen mirroring paths</title>
-  <desc id="description">A Mac or Android phone sends its screen over the local Wi Fi network to the EmberCast receiver on Fire TV.</desc>
+  <desc id="description">A Mac or Android phone sends its screen over the local Wi Fi network to EmberCast on Fire TV. Small light pulses move along each connection path.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#211d1a"/>
@@ -17,6 +17,25 @@
   <path d="M374 183C430 183 447 207 488 218" fill="none" stroke="#f5a77e" stroke-width="3" marker-end="url(#arrow)"/>
   <path d="M374 313C430 313 447 289 488 278" fill="none" stroke="#f5a77e" stroke-width="3" marker-end="url(#arrow)"/>
   <path d="M711 248H823" fill="none" stroke="#f5a77e" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(374 183)">
+    <circle r="6" fill="#fff8f0" stroke="#f5a77e" stroke-width="2">
+      <animateMotion path="M0 0C56 0 73 24 114 35" dur="3.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.35;1;0.35" dur="3.6s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  <g transform="translate(374 313)">
+    <circle r="6" fill="#fff8f0" stroke="#f5a77e" stroke-width="2">
+      <animateMotion path="M0 0C56 0 73 -24 114 -35" dur="3.6s" begin="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.35;1;0.35" dur="3.6s" begin="1.8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  <g transform="translate(711 248)">
+    <circle r="6" fill="#fff8f0" stroke="#f5a77e" stroke-width="2">
+      <animateMotion path="M0 0H112" dur="3.6s" begin="0.9s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.35;1;0.35" dur="3.6s" begin="0.9s" repeatCount="indefinite"/>
+    </circle>
+  </g>
 
   <rect x="72" y="132" width="302" height="104" rx="18" fill="#302a25" stroke="#51453c"/>
   <g transform="translate(93 153) scale(1.8)" fill="none" stroke="#ffd4bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
