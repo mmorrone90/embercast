@@ -42,8 +42,8 @@
     <path d="M3 19l18 0"/>
     <path d="M5 7a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v8a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -8"/>
   </g>
-  <text x="158" y="173" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700">Mac through AirPlay</text>
-  <text x="158" y="198" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="13">Mac tested. iPhone and iPad unverified.</text>
+  <text x="266" y="173" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle">Mac through AirPlay</text>
+  <text x="266" y="198" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="13" text-anchor="middle">Mac tested. iPhone and iPad unverified.</text>
 
   <rect x="72" y="262" width="302" height="104" rx="18" fill="#302a25" stroke="#51453c"/>
   <g transform="translate(99 278) scale(1.8)" fill="none" stroke="#ffd4bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,8 +51,8 @@
     <path d="M11 4h2"/>
     <path d="M12 17v.01"/>
   </g>
-  <text x="158" y="304" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700">Android phone</text>
-  <text x="158" y="329" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="13">Use the EmberCast Phone app.</text>
+  <text x="266" y="304" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle">Android phone</text>
+  <text x="266" y="329" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="13" text-anchor="middle">Use the EmberCast Phone app.</text>
 
   <circle cx="600" cy="248" r="91" fill="#302a25" stroke="#51453c"/>
   <g transform="translate(576 207) scale(2)" fill="none" stroke="#ffd4bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
