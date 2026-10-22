@@ -14,7 +14,7 @@ func draw(_ path: String, width: Int, height: Int, banner: Bool = false, store: 
     let ctx = NSGraphicsContext.current!.cgContext
     ctx.setFillColor(bg.cgColor)
     ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-    let scale = banner ? CGFloat(width) / 320 * 0.76 : store ? 2.4 : CGFloat(width) / 320 * 1.25
+    let scale = banner ? CGFloat(width) / 320 * 0.95 : store ? 2.4 : CGFloat(width) / 320 * 1.25
     let cx = CGFloat(width) / 2
     let top = banner ? 10 * scale : store ? 138 : 38 * scale
     let ox = cx - 48 * scale
@@ -35,17 +35,19 @@ func draw(_ path: String, width: Int, height: Int, banner: Bool = false, store: 
     ctx.fillPath()
     ctx.fillEllipse(in: CGRect(x: ox + 57 * scale, y: oy + 16 * scale, width: 5.5 * scale, height: 5.5 * scale))
     if banner || store {
-        let fontSize = banner ? 28 : 108
+        let fontSize = banner ? Int(CGFloat(width) / 320 * 34) : 108
         let font = NSFont.systemFont(ofSize: CGFloat(fontSize), weight: .bold)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink, .kern: banner ? -0.4 : -2.0]
         let title = "EmberCast" as NSString
         let measured = title.size(withAttributes: attrs)
-        let y = banner ? 12.0 : 102.0
+        let y = banner ? CGFloat(12) * CGFloat(width) / 320 : 102.0
         title.draw(at: CGPoint(x: CGFloat(width) / 2 - measured.width / 2, y: y), withAttributes: attrs)
     }
     NSGraphicsContext.restoreGraphicsState()
     try bmp.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
 }
+try FileManager.default.createDirectory(atPath: project + "/receiver/app/src/main/res/drawable-xhdpi", withIntermediateDirectories: true)
 try draw(project + "/receiver/app/src/main/res/drawable/embercast_square_icon.png", width: 320, height: 320)
-try draw(project + "/receiver/app/src/main/res/drawable/embercast_banner.png", width: 320, height: 180, banner: true)
+try draw(project + "/receiver/app/src/main/res/drawable-xhdpi/embercast_banner.png", width: 640, height: 360, banner: true)
+try draw(project + "/artwork/fire_tv_icon_1280x720.png", width: 1280, height: 720, banner: true)
 try draw(project + "/artwork/embercast_store_artwork_1280x720.png", width: 1280, height: 720, store: true)

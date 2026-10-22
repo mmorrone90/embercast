@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title description">
+  <title id="title">EmberCast screen mirroring paths</title>
+  <desc id="description">A Mac or Android phone sends its screen over the local Wi Fi network to the EmberCast receiver on Fire TV.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#211d1a"/>
+      <stop offset="1" stop-color="#131211"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#f5a77e"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="440" rx="26" fill="url(#background)"/>
+  <text x="600" y="61" fill="#fff8f0" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">One TV, two ways to mirror</text>
+  <text x="600" y="94" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="15" text-anchor="middle">Keep the devices on the same local Wi Fi network</text>
+
+  <path d="M374 183C430 183 447 207 488 218" fill="none" stroke="#f5a77e" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M374 313C430 313 447 289 488 278" fill="none" stroke="#f5a77e" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M711 248H823" fill="none" stroke="#f5a77e" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="72" y="132" width="302" height="104" rx="18" fill="#302a25" stroke="#51453c"/>
+  <g transform="translate(93 153) scale(1.8)" fill="none" stroke="#ffd4bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 19l18 0"/>
+    <path d="M5 7a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v8a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -8"/>
+  </g>
+  <text x="158" y="173" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700">Mac through AirPlay</text>
+  <text x="158" y="198" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="13">Mac tested. iPhone and iPad unverified.</text>
+
+  <rect x="72" y="262" width="302" height="104" rx="18" fill="#302a25" stroke="#51453c"/>
+  <g transform="translate(99 278) scale(1.8)" fill="none" stroke="#ffd4bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14"/>
+    <path d="M11 4h2"/>
+    <path d="M12 17v.01"/>
+  </g>
+  <text x="158" y="304" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700">Android phone</text>
+  <text x="158" y="329" fill="#c5bcb4" font-family="Arial, sans-serif" font-size="13">Use the EmberCast Phone app.</text>
+
+  <circle cx="600" cy="248" r="91" fill="#302a25" stroke="#51453c"/>
+  <g transform="translate(576 207) scale(2)" fill="none" stroke="#ffd4bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 18l.01 0"/>
+    <path d="M9.172 15.172a4 4 0 0 1 5.656 0"/>
+    <path d="M6.343 12.343a8 8 0 0 1 11.314 0"/>
+    <path d="M3.515 9.515c4.686 -4.687 12.284 -4.687 17 0"/>
+  </g>
+  <text x="600" y="315" fill="#fff8f0" font-family="Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle">Local network</text>
+
+  <rect x="824" y="155" width="304" height="186" rx="20" fill="#302a25" stroke="#f5a77e" stroke-width="2"/>
+  <rect x="871" y="184" width="210" height="113" rx="9" fill="#1b1917" stroke="#ffd4bd" stroke-width="4"/>
+  <path d="M954 309h44m-22-12v12m-49 8h76" fill="none" stroke="#ffd4bd" stroke-width="4" stroke-linecap="round"/>
+  <text x="976" y="369" fill="#fff8f0" font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle">EmberCast on Fire TV</text>
+  <text x="600" y="414" fill="#998f87" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Screen mirroring only. Protected video may be blocked by its source app.</text>
+</svg>

@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a problem with EmberCast or EmberCast Phone
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Please remove home network addresses, account details, private screenshots,
+        and personal recordings before sharing diagnostics.
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+      placeholder: 0.8.1
+    validations:
+      required: true
+  - type: input
+    id: tv_model
+    attributes:
+      label: Fire TV model and Fire OS version
+      placeholder: Fire TV Stick model, Fire OS version
+    validations:
+      required: true
+  - type: input
+    id: sender
+    attributes:
+      label: Sender device and OS version
+      placeholder: Mac, iPhone, or Android phone and OS version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include what you expected and what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Safe diagnostics
+      description: Remove private addresses, identifiers, and personal content.
+    validations:
+      required: false
