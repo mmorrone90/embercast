@@ -49,5 +49,5 @@ class MainActivity : TvActivity() {
             ?: getString(R.string.no_stream)
     }
 
-    companion object { const val TAG = "FireMirror" }
+    companion object { const val TAG = "EmberCast" }
 }

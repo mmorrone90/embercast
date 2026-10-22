@@ -9,7 +9,7 @@ EmberCast has two apps. Install the receiver on an Android based Fire TV, then i
 * Fire TV and sender must be on the same local network. The network must allow device to device traffic and multicast DNS discovery.
 * Fire TV devices using Vega OS are not supported by these Android APKs.
 
-There is no signed public release yet. Use a debug APK artifact from a successful [Android build](https://github.com/mmorrone90/firemirror/actions/workflows/android.yml) or build the APKs from source as described below. GitHub Actions artifacts are temporary test builds, not permanent releases.
+There is no signed public release yet. Use a debug APK artifact from a successful [Android build](https://github.com/mmorrone90/embercast/actions/workflows/android.yml) or build the APKs from source as described below. GitHub Actions artifacts are temporary test builds, not permanent releases.
 
 ## 2. Get the APKs
 
@@ -27,8 +27,8 @@ export PATH="$ANDROID_HOME/platform-tools:$PATH"
 On Linux, use the SDK folder selected in Android Studio.
 
 ```sh
-git clone --recurse-submodules https://github.com/mmorrone90/firemirror.git
-cd firemirror
+git clone --recurse-submodules https://github.com/mmorrone90/embercast.git
+cd embercast
 ./scripts/build-receiver.sh
 ./scripts/build-phone.sh
 ```
@@ -93,6 +93,18 @@ Android may ask you to allow installation from that file manager or installer. T
 6. Tap **Stop sharing** on the phone or its sharing notification to end the session.
 
 Some Android apps disallow playback capture. Android's protected video surfaces may show a black image on the TV. EmberCast cannot bypass DRM or those system restrictions.
+
+## Optional: install with an AI assistant
+
+Codex or another AI assistant with access to a local terminal can run the build and ADB installer for you. This still requires Android SDK tools on the computer, ADB debugging enabled on the Fire TV, and both devices on the same local network. The first connection must be approved on the TV itself. An AI chat on a phone or in a browser cannot reach your Fire TV unless it is connected to a computer that has ADB access.
+
+Open the EmberCast project folder in your local coding assistant and paste this prompt, replacing `FIRE_TV_IP` with the address shown in Fire TV network settings:
+
+```text
+Read docs/INSTALL.md, then build and install the EmberCast receiver on my Fire TV at FIRE_TV_IP. Check that ADB, Java 17, and the Android SDK are available first. Build with ./scripts/build-receiver.sh and install with ./scripts/install.sh FIRE_TV_IP. Do not uninstall any app, change project files, or install the phone APK on the TV. If the TV asks me to authorize ADB, stop and tell me to accept the prompt, then continue after I confirm. If a command fails, explain the error and wait before trying a different approach. When installation succeeds, tell me how to connect my Mac or Android phone.
+```
+
+The phone app is optional and is installed separately on an Android phone. Use the manual steps above or ask the assistant to build it with `./scripts/build-phone.sh` and install the resulting APK on the connected phone. The receiver APK belongs on Fire TV; the phone APK belongs on Android.
 
 ## Troubleshooting
 

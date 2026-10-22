@@ -7,8 +7,8 @@ Thanks for helping improve EmberCast. Start with a fork and a branch, then keep 
 Clone with all source submodules, install JDK 17 and Android SDK Platform 36, and accept the required SDK and NDK licenses:
 
 ```sh
-git clone --recurse-submodules https://github.com/mmorrone90/firemirror.git
-cd firemirror
+git clone --recurse-submodules https://github.com/mmorrone90/embercast.git
+cd embercast
 ```
 
 The receiver build also needs NDK `27.0.12077973` and CMake. For install and device setup, see [docs/INSTALL.md](docs/INSTALL.md). For build and release checks, see [docs/PROCEDURES.md](docs/PROCEDURES.md).

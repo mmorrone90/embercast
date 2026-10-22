@@ -6,7 +6,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/mmorrone90/firemirror/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/mmorrone90/firemirror/actions/workflows/android.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/mmorrone90/embercast/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/mmorrone90/embercast/actions/workflows/android.yml/badge.svg?branch=main"></a>
   <a href="LICENSE"><img alt="GPL 3.0 only" src="https://img.shields.io/badge/code-license%20GPL--3.0--only-blue"></a>
 </p>
 
@@ -27,13 +27,13 @@ Protected video surfaces can appear black while app controls or subtitles remain
 
 ## Install and try it
 
-There is no signed public release yet. The project builds debug APKs for testing. You can build them on a Mac or download the temporary APK artifacts from a successful [Android build](https://github.com/mmorrone90/firemirror/actions/workflows/android.yml) run. See [step by step installation](docs/INSTALL.md) for the Fire TV setup, Android phone setup, and troubleshooting.
+There is no signed public release yet. The project builds debug APKs for testing. You can build them on a Mac or download the temporary APK artifacts from a successful [Android build](https://github.com/mmorrone90/embercast/actions/workflows/android.yml) run. See [step by step installation](docs/INSTALL.md) for manual and AI assisted setup, Fire TV and Android phone installation, and troubleshooting.
 
 To build from source, install JDK 17 and Android SDK tools, then run:
 
 ```sh
-git clone --recurse-submodules https://github.com/mmorrone90/firemirror.git
-cd firemirror
+git clone --recurse-submodules https://github.com/mmorrone90/embercast.git
+cd embercast
 ./scripts/build-receiver.sh
 ./scripts/build-phone.sh
 ```
@@ -52,7 +52,7 @@ The receiver requires Android API 24 or newer. EmberCast Phone requires Android 
 
 ## Build and contribute
 
-The root `app/` folder is an earlier TV interface prototype. The functional AirPlay receiver is built from the pinned `receiver/` source and `patches/receiver-firemirror.patch`. Build and test procedures are in [CONTRIBUTING.md](CONTRIBUTING.md) and [development procedures](docs/PROCEDURES.md). GitHub Actions builds both APKs and runs the project checks for each change.
+The root `app/` folder is an earlier TV interface prototype. The functional AirPlay receiver is built from the pinned `receiver/` source and `patches/receiver-embercast.patch`. Android application IDs retain their older `dev.firemirror.*` names so existing installations can receive compatible updates. Build and test procedures are in [CONTRIBUTING.md](CONTRIBUTING.md) and [development procedures](docs/PROCEDURES.md). GitHub Actions builds both APKs and runs the project checks for each change.
 
 ## License
 

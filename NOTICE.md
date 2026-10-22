@@ -2,7 +2,7 @@
 
 ## EmberCast source code
 
-The application source, Android phone sender, FireMirror modifications, build scripts, and receiver patch are licensed under GNU GPL version 3 only. See [`LICENSE`](LICENSE). The functional receiver is based on Android AirPlay Server revision `c8defdd70d7e6a04f4f1b71d353653682d594106`, included as the `receiver/` Git submodule. Its source retains its upstream copyright and GPL notices. The UxPlay implementation and its patches are also GPL licensed.
+The application source, Android phone sender, EmberCast modifications, build scripts, and receiver patch are licensed under GNU GPL version 3 only. See [`LICENSE`](LICENSE). The functional receiver is based on Android AirPlay Server revision `c8defdd70d7e6a04f4f1b71d353653682d594106`, included as the `receiver/` Git submodule. Its source retains its upstream copyright and GPL notices. The UxPlay implementation and its patches are also GPL licensed.
 
 The native source dependencies are pinned in the receiver submodules: UxPlay `462153392f2e30937424922039ff9f0cda5e7b1a`, FFmpeg `38b88335f99e76ed89ff3c93f877fdefce736c13`, libplist `f41b1ea67045e0c09339974d83e389972d84f166`, and openssl-cmake `4edd36a8dab5f85a8f92650b5bdf6e0cab13aab8`. Keep their license files and notices when building or distributing. FFmpeg and libplist contain components with different license terms; review their source trees and build configuration before redistributing a binary.
 

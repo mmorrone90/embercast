@@ -3,12 +3,12 @@ set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 receiver_dir="$project_dir/receiver"
-patch_file="$project_dir/patches/receiver-firemirror.patch"
+patch_file="$project_dir/patches/receiver-embercast.patch"
 
 git -C "$project_dir" submodule update --init --recursive receiver
 
 if git -C "$receiver_dir" apply --reverse --check "$patch_file"; then
-    echo "FireMirror receiver patch is already applied."
+    echo "EmberCast receiver patch is already applied."
 elif git -C "$receiver_dir" apply --check "$patch_file"; then
     git -C "$receiver_dir" apply "$patch_file"
 else

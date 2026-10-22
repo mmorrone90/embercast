@@ -10,7 +10,7 @@ object DeviceDiagnostics {
     val executor = Executors.newSingleThreadExecutor()
 
     fun report(context: Context): String = buildString {
-        appendLine("FireMirror 0.1.0 · Phase 1")
+        appendLine("EmberCast 0.1.0 · Phase 1")
         appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("Build: ${Build.DISPLAY}")

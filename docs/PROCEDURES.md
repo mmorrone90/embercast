@@ -5,8 +5,8 @@ These procedures keep builds repeatable and distinguish a local debug build from
 ## Prepare a checkout
 
 ```sh
-git clone --recurse-submodules https://github.com/mmorrone90/firemirror.git
-cd firemirror
+git clone --recurse-submodules https://github.com/mmorrone90/embercast.git
+cd embercast
 git submodule status --recursive
 ```
 
@@ -55,12 +55,12 @@ Record the model, Fire OS version, Android API, app version, network type, and e
 
 ## Change the receiver
 
-`receiver/` is a pinned upstream Git submodule. EmberCast receiver changes are carried in `patches/receiver-firemirror.patch`, which the build script applies after initializing the submodules. The patch must apply to the revision named in `git submodule status`. Preserve upstream attribution and license notices. Keep the local banner backup out of the patch and out of commits.
+`receiver/` is a pinned upstream Git submodule. EmberCast receiver changes are carried in `patches/receiver-embercast.patch`, which the build script applies after initializing the submodules. The patch must apply to the revision named in `git submodule status`. Preserve upstream attribution and license notices. Keep the local banner backup out of the patch and out of commits.
 
 To check that the patch is already applied in a development checkout:
 
 ```sh
-git -C receiver apply --reverse --check ../patches/receiver-firemirror.patch
+git -C receiver apply --reverse --check ../patches/receiver-embercast.patch
 ```
 
 To test it from a clean checkout, clone with submodules and run `./scripts/build-receiver.sh`. Do not update the receiver or its nested UxPlay, FFmpeg, libplist, or OpenSSL submodule revisions without reviewing compatibility, security fixes, and every affected license.
